@@ -24,6 +24,8 @@ const ICONS = {
   message: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
   trash: '<path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>',
   copy: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
   spark: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8"/>',
 };
 function icon(name) { return `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] || ''}</svg>`; }
@@ -197,6 +199,7 @@ function renderChrome() {
   $('#tabbar').innerHTML = NAV.map(([id, , short, ic]) => `
     <a class="tab${state.view === id ? ' active' : ''}" href="#${id}">${icon(ic)}<span>${short}</span>${id === 'painel' && attention ? '<span class="dot"></span>' : ''}</a>`).join('');
   $('#logout').innerHTML = `${icon('logout')}<span>Sair</span>`;
+  renderThemeButtons();
   const sim = isSimulated();
   for (const el of [$('#mode-pill'), $('#mode-pill-m')]) {
     el.hidden = !clinic();
@@ -836,7 +839,8 @@ function showConfig() {
         </div>`)}
 
       <div class="save-bar"><span class="hint" id="save-state"></span><button class="btn primary" type="submit">${icon('check')}Salvar configurações</button></div>
-    </form>`;
+    </form>
+    <div><button class="btn ghost danger" type="button" id="logout-config">${icon('logout')}Sair da conta</button></div>`;
 
   $('#config-form').addEventListener('input', () => { $('#save-state').textContent = 'Alterações não salvas'; });
   $('#config-form').addEventListener('click', async (e) => {
@@ -846,6 +850,7 @@ function showConfig() {
   });
   $('#config-form').addEventListener('submit', saveConfig);
   $('#wa-check').addEventListener('click', checkWhatsApp);
+  $('#logout-config').addEventListener('click', logout);
 }
 
 async function checkWhatsApp() {
@@ -901,6 +906,23 @@ async function saveConfig(e, keepScreen = false) {
   return saved;
 }
 
+// ---------- Tema claro / escuro ----------
+
+function currentTheme() { return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'; }
+function renderThemeButtons() {
+  const dark = currentTheme() === 'dark';
+  $('#theme-side').innerHTML = `${icon(dark ? 'sun' : 'moon')}<span>${dark ? 'Tema claro' : 'Tema escuro'}</span>`;
+  $('#theme-m').innerHTML = icon(dark ? 'sun' : 'moon');
+  $('#theme-m').setAttribute('aria-label', dark ? 'Usar tema claro' : 'Usar tema escuro');
+  document.querySelector('meta[name="theme-color"]').setAttribute('content', dark ? '#0d171a' : '#0b3a40');
+}
+function toggleTheme() {
+  const next = currentTheme() === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem('theme', next); } catch { /* sem armazenamento */ }
+  renderThemeButtons();
+}
+
 // ---------- Eventos globais ----------
 
 document.addEventListener('click', (e) => {
@@ -923,6 +945,8 @@ document.addEventListener('click', (e) => {
   if (qr && state.sel?.phone) simulateReply({ reply_id: qr.dataset.reply, label: qr.textContent });
 });
 $('#drawer-backdrop').addEventListener('click', closeDrawer);
+$('#theme-side').addEventListener('click', toggleTheme);
+$('#theme-m').addEventListener('click', toggleTheme);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && state.sel && !document.querySelector('dialog[open]')) closeDrawer(); });
 window.addEventListener('hashchange', () => { if (!$('#shell').hidden) route(); });
 for (const sel of [$('#clinic-select'), $('#clinic-select-m')]) {
@@ -936,10 +960,11 @@ for (const sel of [$('#clinic-select'), $('#clinic-select-m')]) {
     route();
   });
 }
-$('#logout').addEventListener('click', async () => {
+async function logout() {
   await api('/api/logout', { method: 'POST', body: {} }).catch(() => null);
   showLogin();
-});
+}
+$('#logout').addEventListener('click', logout);
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));

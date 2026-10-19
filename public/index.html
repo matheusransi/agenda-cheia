@@ -16,6 +16,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
   <link rel="stylesheet" href="/styles.css">
+  <script>try { document.documentElement.dataset.theme = localStorage.getItem('theme') || 'light'; } catch (e) { document.documentElement.dataset.theme = 'light'; }</script>
 </head>
 <body>
   <div class="shell" id="shell" hidden>
@@ -28,6 +29,7 @@
       <nav class="side-nav" id="side-nav"></nav>
       <div class="side-foot">
         <span class="mode-pill" id="mode-pill" hidden></span>
+        <button type="button" class="side-link" id="theme-side"></button>
         <button type="button" class="side-link" id="logout"></button>
       </div>
     </aside>
@@ -36,6 +38,7 @@
       <div class="brand"><span class="brand-mark" aria-hidden="true"></span></div>
       <select id="clinic-select-m" aria-label="Clínica"></select>
       <span class="mode-pill small" id="mode-pill-m" hidden></span>
+      <button type="button" class="theme-btn" id="theme-m"></button>
     </header>
 
     <main class="main" id="app"></main>

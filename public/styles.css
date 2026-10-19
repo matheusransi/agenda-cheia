@@ -33,8 +33,7 @@
   --font: "Plus Jakarta Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
   color-scheme: light;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
+:root[data-theme="dark"] {
     --bg: #0a1114; --surface: #111b1f; --surface-3: #1c2b31; --ink: #e7eff1; --ink-2: #c3d2d5; --muted: #8b9fa4; --line: #1f2f35;
     --surface-2: #162328;
     --accent: #3cc6d1; --accent-strong: #63d6df; --accent-ink: #062226; --accent-soft: #123a3f;
@@ -44,7 +43,6 @@
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3); --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 20px rgba(0, 0, 0, 0.25); --shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.5);
     color-scheme: dark;
   }
-}
 
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -107,6 +105,8 @@ svg.i { width: 18px; height: 18px; flex: none; stroke: currentColor; fill: none;
 }
 .mode-pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 .mode-pill.live { background: rgba(74, 222, 128, 0.15); color: #4ade80; }
+.theme-btn { width: 36px; height: 36px; border-radius: 10px; border: 0; background: var(--side-hover); color: var(--side-ink); display: grid; place-items: center; flex: none; }
+.theme-btn:hover { background: var(--side-active); }
 
 .mobile-head, .tabbar { display: none; }
 .main {
