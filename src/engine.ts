@@ -358,8 +358,10 @@ export async function handleInbound(
   await recordInbound(env, clinic, phone, text || input.replyId || '', input.waId ?? null, ctx);
 
   if (!action) {
-    await send(env, clinic, phone, { kind: 'text', text: clinic.settings.texts.fallback });
     await logEvent(env, clinic.id, `Mensagem de ${fmtPhone(phone)} precisa de resposta da recepção: "${text.slice(0, 80)}"`, 'warn');
+    const res = await send(env, clinic, phone, { kind: 'text', text: clinic.settings.texts.fallback });
+    if (!res.ok) await logEvent(env, clinic.id, `Não consegui responder ${fmtPhone(phone)} pelo WhatsApp: ${res.error}`, 'bad');
+    else if (isSimulated(env, clinic)) await logOnce(env, clinic, 'Resposta não enviada de verdade porque o modo teste está ligado (ou falta o token/ID do número).', 'warn', 1);
     return;
   }
 

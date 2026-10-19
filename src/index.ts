@@ -251,7 +251,10 @@ app.post('/webhook/whatsapp', async (c) => {
     const { results } = await c.env.DB.prepare("SELECT id, wa_app_secret FROM clinics WHERE wa_app_secret != ''").all<{ id: number; wa_app_secret: string }>();
     for (const r of results) {
       if (await verifySignature(r.wa_app_secret, raw, signature)) {
-        await logEvent(c.env, r.id, 'Teste de webhook da Meta recebido: a ligação com o WhatsApp está funcionando.', 'ok');
+        const isMetaTest = ids.every((id) => id === '123456123');
+        await logEvent(c.env, r.id, isMetaTest
+          ? 'Teste de webhook da Meta recebido: a ligação com o WhatsApp está funcionando.'
+          : `Chegou mensagem para o número de ID ${ids.join(', ')}, mas nenhuma clínica usa esse ID. Confira o “ID do número” em Configurações.`, isMetaTest ? 'ok' : 'bad');
         return c.text('ok');
       }
     }

@@ -25,6 +25,8 @@ describe('telefones e eventos', () => {
     expect(normalizePhone('(11) 98765-4321')).toBe('5511987654321');
     expect(normalizePhone('+55 11 98765 4321')).toBe('5511987654321');
     expect(normalizePhone('123')).toBeNull();
+    expect(normalizePhone('551187654321')).toBe('5511987654321'); // WhatsApp sem o nono dígito
+    expect(normalizePhone('551132654321')).toBe('551132654321'); // fixo continua igual
   });
   it('compara telefone com e sem o nono dígito', () => {
     expect(phoneKey('5511987654321')).toBe(phoneKey('551187654321'));

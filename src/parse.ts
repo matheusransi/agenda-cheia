@@ -6,6 +6,9 @@ export function normalizePhone(raw: string): string | null {
   if (digits.startsWith('00')) digits = digits.slice(2);
   if (digits.length === 10 || digits.length === 11) digits = '55' + digits;
   if (digits.length < 12 || digits.length > 13) return null;
+  // Celulares brasileiros antigos chegam do WhatsApp sem o nono dígito (55 11 8765-4321).
+  // A Meta só entrega para o número completo, então o 9 é recolocado.
+  if (digits.startsWith('55') && digits.length === 12 && /[6-9]/.test(digits[4])) digits = digits.slice(0, 4) + '9' + digits.slice(4);
   return digits;
 }
 
