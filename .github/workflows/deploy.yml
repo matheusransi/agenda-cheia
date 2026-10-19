@@ -49,7 +49,7 @@ jobs:
           echo "::add-mask::$ACCOUNT"
           echo "::add-mask::$TOKEN"
           echo "CLOUDFLARE_ACCOUNT_ID=$ACCOUNT" >> "$GITHUB_ENV"
-          echo "CLOUDFLARE_API_TOKEN=$TOKEN" >> "$GITHUB_ENV
+          echo "CLOUDFLARE_API_TOKEN=$TOKEN" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
         if: steps.check.outputs.skip != 'true'
       - uses: actions/setup-node@v4
