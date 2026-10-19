@@ -126,7 +126,7 @@ export async function verifySignature(secret: string, body: string, header: stri
 }
 
 export type Inbound = { phoneNumberId: string; from: string; waId: string; replyId?: string; text?: string };
-export type StatusUpdate = { waId: string; status: string; error?: string };
+export type StatusUpdate = { waId: string; status: string; error?: string; recipient?: string; phoneNumberId?: string };
 
 /** Extrai mensagens recebidas e atualizações de status do corpo do webhook. */
 export function parseWebhook(body: unknown): { inbound: Inbound[]; statuses: StatusUpdate[] } {
@@ -154,7 +154,9 @@ export function parseWebhook(body: unknown): { inbound: Inbound[]; statuses: Sta
         inbound.push(item);
       }
       for (const s of value.statuses ?? []) {
-        statuses.push({ waId: String(s.id ?? ''), status: String(s.status ?? ''), error: s.errors?.[0]?.title ?? s.errors?.[0]?.message });
+        const err = s.errors?.[0];
+        const error = err ? [err.code ? `(${err.code})` : '', err.title ?? err.message, err.error_data?.details].filter(Boolean).join(' ') : undefined;
+        statuses.push({ waId: String(s.id ?? ''), status: String(s.status ?? ''), error, recipient: s.recipient_id, phoneNumberId });
       }
     }
   }

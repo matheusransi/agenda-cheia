@@ -299,7 +299,10 @@ async function processWebhook(env: Env, body: unknown): Promise<void> {
       .bind(status, s.error ?? null, s.waId).run();
     if (status === 'erro') {
       const msg = await env.DB.prepare('SELECT clinic_id, phone FROM messages WHERE wa_id = ?').bind(s.waId).first<{ clinic_id: number; phone: string }>();
-      if (msg) await logEvent(env, msg.clinic_id, `WhatsApp não entregou mensagem para ${msg.phone}: ${s.error ?? 'erro'}`, 'bad');
+      // Mensagens enviadas pelo painel da Meta não estão no histórico: acha a clínica pelo número.
+      const clinicId = msg?.clinic_id
+        ?? (await env.DB.prepare('SELECT id FROM clinics WHERE wa_phone_number_id = ?').bind(s.phoneNumberId ?? '').first<{ id: number }>())?.id;
+      if (clinicId) await logEvent(env, clinicId, `WhatsApp não entregou mensagem para ${msg?.phone ?? s.recipient ?? '?'}: ${s.error ?? 'erro'}`, 'bad');
     }
   }
 }

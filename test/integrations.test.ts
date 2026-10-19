@@ -51,6 +51,6 @@ describe('Webhook do WhatsApp', () => {
       .toBe('s:3:100');
     expect(parseWebhook(value({ messages: [{ from: '1', id: 'w3', type: 'text', text: { body: 'vou sim' } }] })).inbound[0].text).toBe('vou sim');
     expect(parseWebhook(value({ statuses: [{ id: 'w4', status: 'failed', errors: [{ title: 'Número inválido' }] }] })).statuses[0])
-      .toEqual({ waId: 'w4', status: 'failed', error: 'Número inválido' });
+      .toEqual({ waId: 'w4', status: 'failed', error: 'Número inválido', recipient: undefined, phoneNumberId: '999' });
   });
 });
