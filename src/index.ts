@@ -3,7 +3,7 @@ import { Hono, type Context } from 'hono';
 import { checkPassword, clearSession, createSession, isLoggedIn } from './auth';
 import {
   type Appointment, type Clinic, type ClinicRow, type Env, type Message, type WaitEntry,
-  getAppointment, getClinic, listClinics, logEvent, toClinic,
+  getAppointment, getClinic, listClinics, logEvent, publicClinic, toClinic,
 } from './db';
 import { cancelAppointment, createAppointment, handleInbound, isSimulated, runCycle } from './engine';
 import { serviceAccount } from './google';
@@ -11,7 +11,7 @@ import { send, windowOpen } from './messaging';
 import { normalizePhone, phoneKey } from './parse';
 import { DEFAULT_SETTINGS, mergeSettings } from './settings';
 import { HOUR, dayRange, localDateKey } from './time';
-import { parseWebhook, verifySignature, whatsappConfigured } from './whatsapp';
+import { parseWebhook, verifySignature, verifyToken } from './whatsapp';
 
 type App = { Bindings: Env; Variables: { clinic: Clinic } };
 const app = new Hono<App>();
@@ -54,14 +54,14 @@ app.get('/api/status', (c) => {
   const sa = serviceAccount(c.env);
   return c.json({
     google: { configured: Boolean(sa), email: sa?.client_email ?? null },
-    whatsapp: { configured: whatsappConfigured(c.env), webhook_ready: Boolean(c.env.WHATSAPP_APP_SECRET && c.env.WHATSAPP_VERIFY_TOKEN) },
+    whatsapp: { env_token: Boolean(c.env.WHATSAPP_TOKEN), env_app_secret: Boolean(c.env.WHATSAPP_APP_SECRET), verify_token: verifyToken(c.env) },
     webhook_url: new URL('/webhook/whatsapp', c.req.url).toString(),
   });
 });
 
 // ---------- Clínicas ----------
 
-app.get('/api/clinics', async (c) => c.json(await listClinics(c.env)));
+app.get('/api/clinics', async (c) => c.json((await listClinics(c.env)).map(publicClinic)));
 
 app.post('/api/clinics', async (c) => {
   const body = await c.req.json<{ name?: string }>();
@@ -69,7 +69,7 @@ app.post('/api/clinics', async (c) => {
   if (!name) return fail(c, 400, 'Informe o nome da clínica.');
   const row = await c.env.DB.prepare('INSERT INTO clinics (name, settings) VALUES (?, ?) RETURNING *')
     .bind(name, JSON.stringify(DEFAULT_SETTINGS)).first<ClinicRow>();
-  return c.json(toClinic(row!));
+  return c.json(publicClinic(toClinic(row!)));
 });
 
 app.use('/api/clinics/:id/*', async (c, next) => {
@@ -85,20 +85,23 @@ app.use('/api/clinics/:id', async (c, next) => {
   await next();
 });
 
-app.get('/api/clinics/:id', (c) => c.json(c.get('clinic')));
+app.get('/api/clinics/:id', (c) => c.json(publicClinic(c.get('clinic'))));
 
 app.put('/api/clinics/:id', async (c) => {
   const clinic = c.get('clinic');
-  const body = await c.req.json<Partial<Clinic>>();
+  const body = await c.req.json<Partial<Clinic> & { wa_token?: string; wa_app_secret?: string }>();
   const settings = mergeSettings(clinic.settings as unknown as Record<string, unknown>, body.settings ?? {});
   const str = (v: unknown, fallback: string) => (typeof v === 'string' ? v.trim() : fallback);
   const name = str(body.name, clinic.name);
   if (!name) return fail(c, 400, 'O nome da clínica não pode ficar vazio.');
-  await c.env.DB.prepare('UPDATE clinics SET name = ?, address = ?, calendar_id = ?, wa_phone_number_id = ?, settings = ? WHERE id = ?')
+  // Token e chave secreta só mudam quando algo novo é digitado (o portal nunca recebe os valores salvos).
+  const secret = (v: unknown, current: string) => (typeof v === 'string' && v.trim() ? v.replace(/\s+/g, '') : current);
+  await c.env.DB.prepare('UPDATE clinics SET name = ?, address = ?, calendar_id = ?, wa_phone_number_id = ?, wa_token = ?, wa_app_secret = ?, settings = ? WHERE id = ?')
     .bind(name, str(body.address, clinic.address), str(body.calendar_id, clinic.calendar_id),
-      str(body.wa_phone_number_id, clinic.wa_phone_number_id), JSON.stringify(settings), clinic.id)
+      str(body.wa_phone_number_id, clinic.wa_phone_number_id).replace(/\D/g, ''), secret(body.wa_token, clinic.wa_token),
+      secret(body.wa_app_secret, clinic.wa_app_secret), JSON.stringify(settings), clinic.id)
     .run();
-  return c.json(await getClinic(c.env, clinic.id));
+  return c.json(publicClinic((await getClinic(c.env, clinic.id))!));
 });
 
 // ---------- Painel ----------
@@ -223,7 +226,7 @@ app.delete('/api/clinics/:id/waitlist/:wid', async (c) => {
 app.get('/webhook/whatsapp', (c) => {
   const mode = c.req.query('hub.mode');
   const token = c.req.query('hub.verify_token');
-  if (mode === 'subscribe' && c.env.WHATSAPP_VERIFY_TOKEN && token === c.env.WHATSAPP_VERIFY_TOKEN) {
+  if (mode === 'subscribe' && token === verifyToken(c.env)) {
     return c.text(c.req.query('hub.challenge') ?? '');
   }
   return c.text('Token de verificação inválido.', 403);
@@ -231,14 +234,27 @@ app.get('/webhook/whatsapp', (c) => {
 
 app.post('/webhook/whatsapp', async (c) => {
   const raw = await c.req.text();
-  if (!c.env.WHATSAPP_APP_SECRET || !(await verifySignature(c.env.WHATSAPP_APP_SECRET, raw, c.req.header('x-hub-signature-256') ?? null))) {
-    return c.text('Assinatura inválida.', 403);
-  }
   let body: unknown;
-  try { body = JSON.parse(raw); } catch { return c.text('ok'); }
+  try { body = JSON.parse(raw); } catch { return c.text('Corpo inválido.', 400); }
+  // A chave secreta pode estar no segredo do Cloudflare ou na clínica (portal). Só processa se a assinatura bater.
+  const ids = [...new Set(parseWebhook(body).inbound.map((m) => m.phoneNumberId).concat(phoneIdsFromStatuses(body)))];
+  const secrets = new Set<string>(c.env.WHATSAPP_APP_SECRET ? [c.env.WHATSAPP_APP_SECRET] : []);
+  for (const id of ids) {
+    const row = await c.env.DB.prepare("SELECT wa_app_secret FROM clinics WHERE wa_phone_number_id = ? AND wa_app_secret != ''").bind(id).first<{ wa_app_secret: string }>();
+    if (row) secrets.add(row.wa_app_secret);
+  }
+  const signature = c.req.header('x-hub-signature-256') ?? null;
+  let valid = false;
+  for (const s of secrets) if (await verifySignature(s, raw, signature)) { valid = true; break; }
+  if (!valid) return c.text('Assinatura inválida.', 403);
   c.executionCtx.waitUntil(processWebhook(c.env, body));
   return c.text('ok');
 });
+
+function phoneIdsFromStatuses(body: unknown): string[] {
+  const entries = (body as { entry?: Array<{ changes?: Array<{ value?: { metadata?: { phone_number_id?: string } } }> }> })?.entry ?? [];
+  return entries.flatMap((e) => (e.changes ?? []).map((ch) => ch.value?.metadata?.phone_number_id ?? '')).filter(Boolean);
+}
 
 const STATUS_PT: Record<string, string> = { sent: 'enviado', delivered: 'entregue', read: 'lido', failed: 'erro' };
 

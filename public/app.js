@@ -295,7 +295,7 @@ function renderDay() {
   const d = state.data;
   const sim = d.simulated;
   $('#banner').innerHTML = sim
-    ? `<div class="banner"><span><strong>Modo teste:</strong> nenhuma mensagem real é enviada. Use o celular ao lado para responder como o paciente.</span><a href="#config">Configurar WhatsApp</a></div>`
+    ? `<div class="banner"><span><strong>Modo teste:</strong> nenhuma mensagem real é enviada. Use o celular ao lado para responder como o paciente.</span><a href="#config">Ligar o WhatsApp</a></div>`
     : '';
   $('#day-label').textContent = dateLabel(d.date) + (d.date === d.today ? ' (hoje)' : d.date === shiftDate(d.today, 1) ? ' (amanhã)' : '');
   $('#day-input').value = d.date;
@@ -549,6 +549,15 @@ function showConfig() {
   const field = (id, label, value, attrs = '') => `<label class="field">${label}<input id="${id}" value="${esc(value)}" ${attrs}></label>`;
   const area = (id, label, value) => `<label class="field">${label}<textarea id="${id}">${esc(value)}</textarea></label>`;
   const check = (id, label, value) => `<label class="check"><input type="checkbox" id="${id}" ${value ? 'checked' : ''}> ${label}</label>`;
+  const hasToken = c.has_wa_token || st.whatsapp.env_token;
+  const hasSecret = c.has_wa_app_secret || st.whatsapp.env_app_secret;
+  const waReady = hasToken && c.wa_phone_number_id;
+  const waStatus = !waReady ? ['Não configurado', 'warn'] : s.test_mode ? ['Pronto, em modo teste', 'info'] : ['Enviando de verdade', 'ok'];
+  const waHint = !waReady
+    ? 'Preencha o ID do número e o token abaixo. Enquanto isso, tudo funciona em modo teste (mensagens simuladas).'
+    : s.test_mode
+      ? 'Desmarque “Modo teste” e salve para as mensagens saírem pelo WhatsApp.'
+      : `As mensagens saem pelo WhatsApp.${hasSecret ? '' : ' Falta a chave secreta do app para receber as respostas.'}`;
 
   app.innerHTML = `
     <div><span class="eyebrow">Configurações</span><h1>${esc(c.name)}</h1></div>
@@ -560,18 +569,28 @@ function showConfig() {
       </section>
 
       <section class="panel panel-pad">
-        <h2>Conexões</h2>
+        <h2>Google Agenda</h2>
         <ul class="status-list">
-          <li>${pill(st.google.configured ? ['Conectado', 'ok'] : ['Não configurado', 'warn'])}<div><strong>Google Agenda</strong><p class="hint">${st.google.configured
+          <li>${pill(st.google.configured ? ['Conectado', 'ok'] : ['Não configurado', 'warn'])}<div><p class="hint">${st.google.configured
             ? `Compartilhe a agenda da clínica com <code>${esc(st.google.email)}</code> e marque “Fazer alterações nos eventos”.`
             : 'Sem a conta de serviço do Google, as consultas são cadastradas pelo portal (“+ Consulta”).'}</p></div></li>
-          <li>${pill(st.whatsapp.configured ? ['Conectado', 'ok'] : ['Não configurado', 'warn'])}<div><strong>WhatsApp</strong><p class="hint">${st.whatsapp.configured
-            ? `Endereço do webhook para colar na Meta: <code>${esc(st.webhook_url)}</code>${st.whatsapp.webhook_ready ? '' : '. Falta configurar WHATSAPP_APP_SECRET e WHATSAPP_VERIFY_TOKEN.'}`
-            : 'Enquanto não houver token, tudo funciona em modo teste (mensagens simuladas).'}</p></div></li>
         </ul>
         ${field('c-calendar', 'ID do Google Agenda', c.calendar_id, 'placeholder="xxxx@group.calendar.google.com"')}
         <p class="hint">No Google Agenda: Configurações da agenda → “Integrar agenda” → ID da agenda. Na agenda, cadastre a consulta com o título <code>Nome do paciente - Procedimento</code> e na descrição <code>Tel: (11) 98765-4321</code> (e, se quiser, <code>Valor: 180</code>).</p>
-        ${field('c-wa', 'ID do número do WhatsApp (Phone number ID)', c.wa_phone_number_id, 'inputmode="numeric"')}
+      </section>
+
+      <section class="panel panel-pad span">
+        <h2>WhatsApp</h2>
+        <ul class="status-list"><li>${pill(waStatus)}<div><p class="hint">${waHint}</p></div></li></ul>
+        <p class="hint">Na Meta: <strong>developers.facebook.com → seu app → WhatsApp → Configuração da API</strong>. Copie de lá o ID do número e o token. A chave secreta fica em <strong>Configurações do app → Básico</strong>.</p>
+        <div class="grid3">
+          ${field('c-wa', 'ID do número (Phone Number ID)', c.wa_phone_number_id, 'inputmode="numeric" placeholder="Ex.: 1433470756509005"')}
+          <label class="field">Token de acesso<input id="c-wa-token" type="password" autocomplete="off" placeholder="${hasToken ? 'Já salvo. Cole um novo para trocar' : 'Cole o token gerado na Meta'}"></label>
+          <label class="field">Chave secreta do app<input id="c-wa-secret" type="password" autocomplete="off" placeholder="${hasSecret ? 'Já salva. Cole uma nova para trocar' : 'Cole a chave secreta do app'}"></label>
+        </div>
+        <p class="hint">Para receber as respostas, em <strong>WhatsApp → Configuração → Webhook</strong> na Meta, cole estes dois valores e assine o campo <strong>messages</strong>:</p>
+        <div class="copy">URL de retorno: <code>${esc(st.webhook_url)}</code><button type="button" class="btn small" data-copy="${esc(st.webhook_url)}">Copiar</button></div>
+        <div class="copy">Token de verificação: <code>${esc(st.whatsapp.verify_token)}</code><button type="button" class="btn small" data-copy="${esc(st.whatsapp.verify_token)}">Copiar</button></div>
         ${check('s-test', 'Modo teste (não envia mensagens reais)', s.test_mode)}
       </section>
 
@@ -643,6 +662,11 @@ function showConfig() {
     </form>`;
 
   $('#config-form').addEventListener('input', () => { $('#save-state').textContent = 'Alterações não salvas'; });
+  $('#config-form').addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-copy]');
+    if (!b) return;
+    try { await navigator.clipboard.writeText(b.dataset.copy); toast('Copiado.'); } catch { toast('Não deu para copiar. Selecione o texto e copie.', true); }
+  });
   $('#config-form').addEventListener('submit', saveConfig);
 }
 
@@ -655,6 +679,7 @@ async function saveConfig(e) {
   for (const d of [0, 1, 2, 3, 4, 5, 6]) work[d] = v('wh-' + d).trim();
   const body = {
     name: v('c-name'), address: v('c-address'), calendar_id: v('c-calendar'), wa_phone_number_id: v('c-wa'),
+    wa_token: v('c-wa-token'), wa_app_secret: v('c-wa-secret'),
     settings: {
       test_mode: ch('s-test'), confirm_days_before: n('s-days'), confirm_time: v('s-confirm'),
       second_reminder: ch('s-second'), second_time: v('s-second-time'), escalate_time: v('s-escalate'),
@@ -675,6 +700,7 @@ async function saveConfig(e) {
   const saved = await act(() => api(`/api/clinics/${state.clinicId}`, { method: 'PUT', body }), 'Configurações salvas.');
   if (!saved) return;
   await loadClinics(state.clinicId);
+  showConfig();
   $('#save-state').textContent = 'Salvo';
 }
 

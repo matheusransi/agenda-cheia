@@ -106,13 +106,19 @@ O sistema lê a agenda a cada 15 minutos. Consultas sem telefone aparecem no por
 2. Em **WhatsApp → Configuração da API** aparecem o **número de teste** (grátis, envia para até 5 números cadastrados), o **ID do número de telefone** (*Phone number ID*) e um token temporário.
 3. O token temporário vence em 24 horas. Para um token permanente: no **Meta Business Suite → Configurações do negócio → Usuários do sistema**, crie um usuário do sistema, dê acesso ao app e gere um token com as permissões `whatsapp_business_messaging` e `whatsapp_business_management`.
 
-### 4.2 Segredos no GitHub
+### 4.2 Colar as chaves no portal (mais fácil)
+
+Em **Configurações → WhatsApp**, no portal, cole o **ID do número**, o **token** e a **chave secreta do app** (em **Configurações do app → Básico** na Meta) e salve. Quando o token temporário vencer, é só colar um novo ali.
+
+Se preferir, dá para usar segredos do GitHub no lugar (eles valem para todas as clínicas):
+
+### 4.2.1 Segredos no GitHub (opcional)
 
 | Nome | O que colocar |
 |---|---|
 | `WHATSAPP_TOKEN` | o token (permanente, de preferência) |
 | `WHATSAPP_APP_SECRET` | em **Configurações do app → Básico → Chave secreta do app** |
-| `WHATSAPP_VERIFY_TOKEN` | uma palavra que você inventa (ex.: `agenda-cheia-2026`) |
+| `WHATSAPP_VERIFY_TOKEN` | opcional: uma palavra que você inventa. Sem ela, o token de verificação é `agendacheia` |
 
 Depois, rode de novo o **Testar e publicar**.
 

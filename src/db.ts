@@ -20,11 +20,19 @@ export type ClinicRow = {
   timezone: string;
   calendar_id: string;
   wa_phone_number_id: string;
+  wa_token: string;
+  wa_app_secret: string;
   settings: string;
   created_at: string;
 };
 
 export type Clinic = Omit<ClinicRow, 'settings'> & { settings: Settings };
+
+/** Versão da clínica enviada ao portal: nunca devolve o token nem a chave secreta, só se estão preenchidos. */
+export function publicClinic(c: Clinic) {
+  const { wa_token, wa_app_secret, ...rest } = c;
+  return { ...rest, has_wa_token: Boolean(wa_token), has_wa_app_secret: Boolean(wa_app_secret) };
+}
 
 export type ApptStatus =
   | 'agendado' | 'aguardando' | 'sem_resposta' | 'ligar' | 'confirmado' | 'remarcando' | 'remarcar'

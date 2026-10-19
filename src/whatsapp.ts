@@ -12,8 +12,14 @@ export type Outgoing =
   | { kind: 'list'; text: string; buttonLabel: string; buttons: Button[] }
   | { kind: 'text'; text: string };
 
-export function whatsappConfigured(env: Env): boolean {
-  return Boolean(env.WHATSAPP_TOKEN);
+/** Token usado pela clínica: o preenchido no portal ou, se vazio, o segredo WHATSAPP_TOKEN. */
+export function whatsappToken(env: Env, clinic: { wa_token?: string }): string {
+  return (clinic.wa_token || env.WHATSAPP_TOKEN || '').trim();
+}
+
+/** Palavra que a Meta usa para confirmar o webhook. */
+export function verifyToken(env: Env): string {
+  return env.WHATSAPP_VERIFY_TOKEN || 'agendacheia';
 }
 
 function payloadFor(to: string, msg: Outgoing): Record<string, unknown> {
@@ -52,16 +58,17 @@ function payloadFor(to: string, msg: Outgoing): Record<string, unknown> {
 }
 
 /** Envia de verdade pela API. Retorna o id da mensagem na Meta. */
-export async function sendWhatsApp(env: Env, phoneNumberId: string, to: string, msg: Outgoing): Promise<string> {
-  if (!env.WHATSAPP_TOKEN) throw new Error('WHATSAPP_TOKEN não configurado.');
+export async function sendWhatsApp(token: string, phoneNumberId: string, to: string, msg: Outgoing): Promise<string> {
+  if (!token) throw new Error('Token do WhatsApp não configurado.');
   if (!phoneNumberId) throw new Error('A clínica não tem o ID do número do WhatsApp configurado.');
   const res = await fetch(`${GRAPH}/${phoneNumberId}/messages`, {
     method: 'POST',
-    headers: { authorization: `Bearer ${env.WHATSAPP_TOKEN}`, 'content-type': 'application/json' },
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
     body: JSON.stringify(payloadFor(to, msg)),
   });
   const data = (await res.json()) as { messages?: Array<{ id: string }>; error?: { message?: string; code?: number } };
   if (!res.ok || !data.messages?.length) {
+    if (data.error?.code === 190) throw new Error('Token do WhatsApp vencido ou inválido. Gere um novo na Meta e cole em Configurações.');
     throw new Error(`WhatsApp recusou (${data.error?.code ?? res.status}): ${data.error?.message ?? 'erro desconhecido'}`);
   }
   return data.messages[0].id;
