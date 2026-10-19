@@ -70,7 +70,10 @@ jobs:
         run: |
           npx wrangler deploy | tee deploy.log
           URL=$(grep -oE 'https://[a-zA-Z0-9.-]+\.workers\.dev' deploy.log | head -1)
-          if [ -n "$URL" ]; then echo "### Portal publicado: $URL" >> "$GITHUB_STEP_SUMMARY"; fi
+          if [ -n "$URL" ]; then
+            echo "### Portal publicado: $URL" >> "$GITHUB_STEP_SUMMARY"
+            echo "::notice title=Portal publicado::$URL"
+          fi
       - name: Enviar senhas e chaves para o Cloudflare
         if: steps.check.outputs.skip != 'true'
         env:
