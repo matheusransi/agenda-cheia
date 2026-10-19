@@ -246,7 +246,18 @@ app.post('/webhook/whatsapp', async (c) => {
   const signature = c.req.header('x-hub-signature-256') ?? null;
   let valid = false;
   for (const s of secrets) if (await verifySignature(s, raw, signature)) { valid = true; break; }
-  if (!valid) return c.text('Assinatura inválida.', 403);
+  if (!valid) {
+    // O botão "Teste" da Meta usa um número fictício: confere com a chave de cada clínica e avisa no portal.
+    const { results } = await c.env.DB.prepare("SELECT id, wa_app_secret FROM clinics WHERE wa_app_secret != ''").all<{ id: number; wa_app_secret: string }>();
+    for (const r of results) {
+      if (await verifySignature(r.wa_app_secret, raw, signature)) {
+        await logEvent(c.env, r.id, 'Teste de webhook da Meta recebido: a ligação com o WhatsApp está funcionando.', 'ok');
+        return c.text('ok');
+      }
+    }
+    console.warn('Webhook com assinatura inválida');
+    return c.text('Assinatura inválida.', 403);
+  }
   c.executionCtx.waitUntil(processWebhook(c.env, body));
   return c.text('ok');
 });
