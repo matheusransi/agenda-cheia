@@ -74,6 +74,43 @@ export async function sendWhatsApp(token: string, phoneNumberId: string, to: str
   return data.messages[0].id;
 }
 
+/**
+ * Confere token e número na Meta e liga o app à conta do WhatsApp Business (subscribed_apps),
+ * sem o que a Meta não repassa as mensagens recebidas ao webhook.
+ */
+export async function checkConnection(token: string, phoneNumberId: string, wabaId: string): Promise<Array<{ ok: boolean; text: string }>> {
+  const out: Array<{ ok: boolean; text: string }> = [];
+  const call = async (method: string, path: string) => {
+    try {
+      const res = await fetch(`${GRAPH}/${path}`, { method, headers: { authorization: `Bearer ${token}` } });
+      const data = (await res.json().catch(() => ({}))) as Record<string, any>;
+      return { ok: res.ok && !data.error, data };
+    } catch (e) {
+      return { ok: false, data: { error: { message: `sem conexão com a Meta (${e instanceof Error ? e.message : e})` } } as Record<string, any> };
+    }
+  };
+  if (!token) return [{ ok: false, text: 'Falta o token de acesso.' }];
+  if (!phoneNumberId) return [{ ok: false, text: 'Falta o ID do número.' }];
+
+  const phone = await call('GET', `${phoneNumberId}?fields=display_phone_number,verified_name`);
+  if (!phone.ok) {
+    const code = phone.data.error?.code;
+    out.push({ ok: false, text: code === 190 ? 'Token vencido ou inválido. Gere um novo na Meta e cole aqui.' : `A Meta recusou o ID do número: ${phone.data.error?.message ?? 'erro desconhecido'}` });
+    return out;
+  }
+  out.push({ ok: true, text: `Token válido. Número ${phone.data.display_phone_number ?? ''} (${phone.data.verified_name ?? 'sem nome'}) encontrado.` });
+
+  if (!wabaId) {
+    out.push({ ok: false, text: 'Preencha o ID da conta do WhatsApp Business para ligar o recebimento de mensagens.' });
+    return out;
+  }
+  const sub = await call('POST', `${wabaId}/subscribed_apps`);
+  out.push(sub.ok
+    ? { ok: true, text: 'App ligado à conta do WhatsApp: as mensagens dos pacientes passam a chegar no portal.' }
+    : { ok: false, text: `Não consegui ligar o app à conta: ${sub.data.error?.message ?? 'erro desconhecido'}` });
+  return out;
+}
+
 /** Confere a assinatura X-Hub-Signature-256 que a Meta envia em cada webhook. */
 export async function verifySignature(secret: string, body: string, header: string | null): Promise<boolean> {
   if (!header?.startsWith('sha256=')) return false;

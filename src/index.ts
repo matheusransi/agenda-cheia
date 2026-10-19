@@ -11,7 +11,7 @@ import { send, windowOpen } from './messaging';
 import { normalizePhone, phoneKey } from './parse';
 import { DEFAULT_SETTINGS, mergeSettings } from './settings';
 import { HOUR, dayRange, localDateKey } from './time';
-import { parseWebhook, verifySignature, verifyToken } from './whatsapp';
+import { checkConnection, parseWebhook, verifySignature, verifyToken, whatsappToken } from './whatsapp';
 
 type App = { Bindings: Env; Variables: { clinic: Clinic } };
 const app = new Hono<App>();
@@ -163,6 +163,14 @@ app.post('/api/clinics/:id/send', async (c) => {
   const res = await send(c.env, clinic, phone, { kind: 'text', text });
   if (!res.ok) return fail(c, 500, res.error ?? 'Falha ao enviar.');
   return c.json({ ok: true });
+});
+
+app.post('/api/clinics/:id/whatsapp-check', async (c) => {
+  const clinic = c.get('clinic');
+  const steps = await checkConnection(whatsappToken(c.env, clinic), clinic.wa_phone_number_id, clinic.settings.wa_business_account_id.replace(/\D/g, ''));
+  const failed = steps.find((s) => !s.ok);
+  await logEvent(c.env, clinic.id, failed ? `Verificação do WhatsApp: ${failed.text}` : 'Verificação do WhatsApp concluída: tudo certo.', failed ? 'bad' : 'ok');
+  return c.json({ steps });
 });
 
 app.post('/api/clinics/:id/run', async (c) => {

@@ -591,7 +591,10 @@ function showConfig() {
         <p class="hint">Para receber as respostas, em <strong>WhatsApp → Configuração → Webhook</strong> na Meta, cole estes dois valores e assine o campo <strong>messages</strong>:</p>
         <div class="copy">URL de retorno: <code>${esc(st.webhook_url)}</code><button type="button" class="btn small" data-copy="${esc(st.webhook_url)}">Copiar</button></div>
         <div class="copy">Token de verificação: <code>${esc(st.whatsapp.verify_token)}</code><button type="button" class="btn small" data-copy="${esc(st.whatsapp.verify_token)}">Copiar</button></div>
+        ${field('s-waba', 'ID da conta do WhatsApp Business (na Meta, ao lado do ID do número)', s.wa_business_account_id, 'inputmode="numeric" placeholder="Ex.: 4846783048931640"')}
         ${check('s-test', 'Modo teste (não envia mensagens reais)', s.test_mode)}
+        <div class="toolbar"><button type="button" class="btn" id="wa-check">Salvar, verificar e ligar o WhatsApp</button></div>
+        <ul class="status-list" id="wa-check-result"></ul>
       </section>
 
       <section class="panel panel-pad">
@@ -668,10 +671,22 @@ function showConfig() {
     try { await navigator.clipboard.writeText(b.dataset.copy); toast('Copiado.'); } catch { toast('Não deu para copiar. Selecione o texto e copie.', true); }
   });
   $('#config-form').addEventListener('submit', saveConfig);
+  $('#wa-check').addEventListener('click', checkWhatsApp);
 }
 
-async function saveConfig(e) {
-  e.preventDefault();
+async function checkWhatsApp() {
+  const btn = $('#wa-check');
+  btn.disabled = true;
+  btn.textContent = 'Verificando...';
+  const saved = await saveConfig(null, true);
+  const r = saved && await act(() => api(`/api/clinics/${state.clinicId}/whatsapp-check`, { method: 'POST', body: {} }));
+  const box = $('#wa-check-result');
+  if (box && r) box.innerHTML = r.steps.map((s) => `<li>${pill(s.ok ? ['OK', 'ok'] : ['Problema', 'bad'])}<div><p>${esc(s.text)}</p></div></li>`).join('');
+  if ($('#wa-check')) { $('#wa-check').disabled = false; $('#wa-check').textContent = 'Salvar, verificar e ligar o WhatsApp'; }
+}
+
+async function saveConfig(e, keepScreen = false) {
+  if (e) e.preventDefault();
   const v = (id) => $('#' + id).value;
   const n = (id) => Number($('#' + id).value);
   const ch = (id) => $('#' + id).checked;
@@ -681,7 +696,7 @@ async function saveConfig(e) {
     name: v('c-name'), address: v('c-address'), calendar_id: v('c-calendar'), wa_phone_number_id: v('c-wa'),
     wa_token: v('c-wa-token'), wa_app_secret: v('c-wa-secret'),
     settings: {
-      test_mode: ch('s-test'), confirm_days_before: n('s-days'), confirm_time: v('s-confirm'),
+      test_mode: ch('s-test'), wa_business_account_id: v('s-waba').replace(/\D/g, ''), confirm_days_before: n('s-days'), confirm_time: v('s-confirm'),
       second_reminder: ch('s-second'), second_time: v('s-second-time'), escalate_time: v('s-escalate'),
       final_reminder: ch('s-final'), final_hours: n('s-final-hours'), send_from: v('s-from'), send_until: v('s-until'),
       work_hours: work, slot_step: n('s-step'), offer_minutes: n('s-offer-min'), offer_on_cancel: ch('s-offer-cancel'),
@@ -698,10 +713,17 @@ async function saveConfig(e) {
     },
   };
   const saved = await act(() => api(`/api/clinics/${state.clinicId}`, { method: 'PUT', body }), 'Configurações salvas.');
-  if (!saved) return;
+  if (!saved) return null;
   await loadClinics(state.clinicId);
+  if (keepScreen) {
+    $('#c-wa-token').value = '';
+    $('#c-wa-secret').value = '';
+    $('#save-state').textContent = 'Salvo';
+    return saved;
+  }
   showConfig();
   $('#save-state').textContent = 'Salvo';
+  return saved;
 }
 
 // ---------- Início ----------

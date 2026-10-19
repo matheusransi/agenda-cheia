@@ -2,6 +2,7 @@
 
 export type Settings = {
   test_mode: boolean;
+  wa_business_account_id: string;
   confirm_days_before: number;
   confirm_time: string;
   second_reminder: boolean;
@@ -36,6 +37,7 @@ export type Settings = {
 
 export const DEFAULT_SETTINGS: Settings = {
   test_mode: true,
+  wa_business_account_id: '',
   confirm_days_before: 1,
   confirm_time: '10:00',
   second_reminder: true,
