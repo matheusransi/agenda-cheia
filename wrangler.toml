@@ -1,0 +1,19 @@
+name = "agenda-cheia"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+
+# Portal (HTML/JS/CSS). As rotas /api e /webhook sempre passam pelo Worker.
+[assets]
+directory = "./public"
+run_worker_first = ["/api/*", "/webhook/*"]
+
+# Roda o ciclo de automação a cada 15 minutos (horário UTC; o código converte para o fuso da clínica).
+[triggers]
+crons = ["*/15 * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "agenda-cheia"
+# Preenchido automaticamente no deploy pelo GitHub Actions (scripts/ci-prepare.mjs).
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"

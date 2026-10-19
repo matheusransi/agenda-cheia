@@ -1,0 +1,183 @@
+# Agenda Cheia
+
+Confirmação automática de consultas pelo WhatsApp para clínicas odontológicas.
+
+- Na véspera, o paciente recebe a confirmação com os botões **Confirmar** e **Remarcar**.
+- Se ele quiser remarcar, recebe os próximos horários livres e escolhe um. A agenda é atualizada sozinha.
+- O horário que ficou livre é oferecido na hora para a **lista de espera**.
+- Quem não responde recebe um 2º lembrete. Se continuar sem resposta, a recepção é avisada no portal para ligar.
+- Quem confirmou recebe um lembrete no dia, algumas horas antes.
+- O portal mostra a agenda, o status de cada paciente, as conversas e o que o sistema fez.
+
+Roda de graça no Cloudflare (Workers + banco D1). O código fica neste repositório e é publicado sozinho a cada mudança.
+
+---
+
+## 1. Colocar no ar (uma vez, uns 20 minutos)
+
+### 1.1 Conta no Cloudflare
+
+1. Crie uma conta grátis em [dash.cloudflare.com](https://dash.cloudflare.com).
+2. No menu da esquerda, abra **Workers e Pages** uma vez. Isso cria o seu endereço `*.workers.dev`.
+
+### 1.2 Chave de acesso (token) do Cloudflare
+
+1. No canto superior direito, clique no seu perfil e depois em **Meu perfil → Tokens de API → Criar token**.
+2. Escolha o modelo **Editar Cloudflare Workers** (*Edit Cloudflare Workers*).
+3. Em **Permissões**, adicione mais uma linha: **Conta → D1 → Editar**.
+4. Em **Recursos da conta**, escolha a sua conta.
+5. Clique em **Continuar** e **Criar token**. Copie o token, porque ele só aparece uma vez.
+
+Pegue também o **ID da conta**: na página inicial do painel, ao lado do nome da conta, use **Copiar ID da conta**.
+
+### 1.3 Segredos no GitHub
+
+No GitHub, abra este repositório e vá em **Settings → Secrets and variables → Actions → New repository secret**. Crie:
+
+| Nome | O que colocar |
+|---|---|
+| `CLOUDFLARE_API_TOKEN` | o token do passo 1.2 |
+| `CLOUDFLARE_ACCOUNT_ID` | o ID da conta |
+| `ADMIN_PASSWORD` | a senha que você vai usar para entrar no portal (use uma senha forte) |
+
+### 1.4 Publicar
+
+Vá em **Actions → Testar e publicar → Run workflow**. Quando terminar (fica verde), o endereço do portal aparece no resumo da execução, algo como `https://agenda-cheia.SEU-USUARIO.workers.dev`.
+
+A partir daí, toda mudança no código é publicada sozinha.
+
+---
+
+## 2. Testar sem WhatsApp e sem Google (modo teste)
+
+Logo depois de publicar, já dá para usar:
+
+1. Entre no portal com a `ADMIN_PASSWORD` e cadastre a clínica.
+2. Em **Configurações**, preencha o endereço.
+3. No **Painel**, use **+ Consulta** para cadastrar pacientes de amanhã (o seu número e de amigos, por exemplo).
+4. Clique em **Enviar confirmações agora**.
+5. Clique num paciente e responda pelo celular simulado: toque nos botões ou escreva "vou sim", "preciso remarcar" etc.
+6. Cadastre alguém na **lista de espera** e peça para remarcar uma consulta: a vaga é oferecida sozinha.
+
+No modo teste nenhuma mensagem real sai. Tudo aparece no portal como se tivesse sido enviado.
+
+---
+
+## 3. Conectar o Google Agenda da clínica
+
+### 3.1 Criar a conta de serviço (uma vez, serve para todas as clínicas)
+
+1. Acesse [console.cloud.google.com](https://console.cloud.google.com) e crie um projeto (ex.: "Agenda Cheia").
+2. Em **APIs e serviços → Biblioteca**, procure **Google Calendar API** e clique em **Ativar**.
+3. Em **IAM e administrador → Contas de serviço → Criar conta de serviço**, dê um nome (ex.: "agenda-cheia") e conclua.
+4. Abra a conta criada, vá em **Chaves → Adicionar chave → Criar nova chave → JSON**. Um arquivo é baixado.
+5. Abra o arquivo, copie **todo** o conteúdo e crie o segredo `GOOGLE_SERVICE_ACCOUNT` no GitHub (como no passo 1.3).
+6. Rode de novo **Actions → Testar e publicar → Run workflow**.
+
+### 3.2 Ligar cada clínica
+
+1. Em **Configurações** do portal aparece o e-mail da conta de serviço (termina em `iam.gserviceaccount.com`).
+2. No Google Agenda da clínica, abra **Configurações e compartilhamento** da agenda, depois **Compartilhar com pessoas específicas**. Adicione esse e-mail com a permissão **Fazer alterações nos eventos**.
+3. Na mesma página, em **Integrar agenda**, copie o **ID da agenda** e cole no portal.
+
+### 3.3 Como a clínica deve cadastrar as consultas
+
+- **Título:** `Nome do paciente - Procedimento` (ex.: `Maria Costa - Limpeza`)
+- **Descrição:** `Tel: (11) 98765-4321` e, se quiser, `Valor: 180`
+
+O sistema lê a agenda a cada 15 minutos. Consultas sem telefone aparecem no portal como "Sem telefone".
+
+---
+
+## 4. Conectar o WhatsApp (API oficial da Meta)
+
+### 4.1 App e número
+
+1. Em [developers.facebook.com](https://developers.facebook.com), crie um app do tipo **Business** e adicione o produto **WhatsApp**.
+2. Em **WhatsApp → Configuração da API** aparecem o **número de teste** (grátis, envia para até 5 números cadastrados), o **ID do número de telefone** (*Phone number ID*) e um token temporário.
+3. O token temporário vence em 24 horas. Para um token permanente: no **Meta Business Suite → Configurações do negócio → Usuários do sistema**, crie um usuário do sistema, dê acesso ao app e gere um token com as permissões `whatsapp_business_messaging` e `whatsapp_business_management`.
+
+### 4.2 Segredos no GitHub
+
+| Nome | O que colocar |
+|---|---|
+| `WHATSAPP_TOKEN` | o token (permanente, de preferência) |
+| `WHATSAPP_APP_SECRET` | em **Configurações do app → Básico → Chave secreta do app** |
+| `WHATSAPP_VERIFY_TOKEN` | uma palavra que você inventa (ex.: `agenda-cheia-2026`) |
+
+Depois, rode de novo o **Testar e publicar**.
+
+### 4.3 Webhook (para receber as respostas)
+
+Em **WhatsApp → Configuração**, na parte de **Webhook**:
+
+- **URL de retorno:** `https://SEU-PORTAL.workers.dev/webhook/whatsapp` (o endereço exato aparece em Configurações no portal)
+- **Token de verificação:** o mesmo `WHATSAPP_VERIFY_TOKEN`
+- Clique em **Verificar e salvar** e assine o campo **messages**.
+
+### 4.4 Modelos de mensagem
+
+Mensagens que a clínica inicia precisam de modelos aprovados. Em **WhatsApp Manager → Modelos de mensagem**, crie os três abaixo, com categoria **Utilidade** e idioma **Português (BR)**. Os nomes e a ordem das variáveis precisam ser exatamente estes:
+
+**`confirmacao_consulta`**
+> Olá, {{1}}! Aqui é da {{2}}. Sua consulta de {{3}} está marcada para {{4}} às {{5}}. Você confirma?
+
+Botões de resposta rápida, nesta ordem: `Confirmar` e `Remarcar`.
+Variáveis: 1 = primeiro nome, 2 = clínica, 3 = procedimento, 4 = data, 5 = hora.
+
+**`oferta_vaga`**
+> Oi, {{1}}! Abriu um horário na {{2}} em {{3}} às {{4}}. Você está na nossa lista de espera. Quer ficar com ele?
+
+Botões de resposta rápida, nesta ordem: `Quero este horário` e `Não posso`.
+Variáveis: 1 = primeiro nome, 2 = clínica, 3 = data, 4 = hora.
+
+**`lembrete_consulta`**
+> Oi, {{1}}! Lembrete: sua consulta na {{2}} é hoje às {{3}}. Endereço: {{4}}. Até logo!
+
+Sem botões. Variáveis: 1 = primeiro nome, 2 = clínica, 3 = hora, 4 = endereço.
+
+Se você aprovar textos diferentes, atualize os nomes e textos em **Configurações → Modelos aprovados pela Meta**. A ordem das variáveis precisa continuar a mesma.
+
+### 4.5 Ligar para valer
+
+No portal, em **Configurações**, preencha o **ID do número do WhatsApp** e desmarque **Modo teste**.
+
+---
+
+## 5. Como o sistema decide
+
+| Quando | O que acontece |
+|---|---|
+| A cada 15 min | Lê o Google Agenda: consultas novas, alteradas ou removidas |
+| Véspera, 10h | Envia a confirmação (horário configurável) |
+| Véspera, 16h | 2º lembrete para quem não respondeu |
+| Véspera, 18h | Quem continua sem resposta vai para "Recepção liga" |
+| Paciente pede para remarcar | Recebe até 3 horários livres (um por dia) e a opção "Falar com a recepção" |
+| Horário liberado | Oferecido ao primeiro da lista de espera, que tem 30 min para aceitar |
+| 2h antes | Lembrete para quem confirmou |
+
+Nenhuma mensagem sai fora do horário configurado (padrão: das 7h às 21h). Até 24 horas depois da última mensagem do paciente, as respostas usam mensagens livres, que a Meta não cobra.
+
+---
+
+## Para desenvolvedores
+
+```bash
+npm install
+printf 'ADMIN_PASSWORD=teste123\nALLOW_TIME_TRAVEL=1\n' > .dev.vars
+npm run db:local      # cria as tabelas no banco local
+npm run dev           # portal em http://localhost:8787
+npm test              # testes
+npm run typecheck
+```
+
+Com `ALLOW_TIME_TRAVEL=1`, o endpoint `POST /api/clinics/:id/run` aceita `{"now": "2026-10-20T19:00:00Z"}` para simular outro horário.
+
+Estrutura:
+
+- `src/index.ts`: rotas da API, webhook e execução agendada
+- `src/engine.ts`: regras (envios, respostas, remarcação, lista de espera, sincronização da agenda)
+- `src/google.ts` e `src/whatsapp.ts`: integrações
+- `src/settings.ts`: configurações padrão de cada clínica
+- `public/`: portal (HTML, CSS e JavaScript, sem framework)
+- `migrations/`: tabelas do banco D1
