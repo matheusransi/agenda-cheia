@@ -69,7 +69,8 @@ export async function sendWhatsApp(token: string, phoneNumberId: string, to: str
   const data = (await res.json()) as { messages?: Array<{ id: string }>; error?: { message?: string; code?: number } };
   if (!res.ok || !data.messages?.length) {
     if (data.error?.code === 190) throw new Error('Token do WhatsApp vencido ou inválido. Gere um novo na Meta e cole em Configurações.');
-    throw new Error(`WhatsApp recusou (${data.error?.code ?? res.status}): ${data.error?.message ?? 'erro desconhecido'}`);
+    const hint = data.error?.code === 131030 ? ' Na Meta, adicione este número na lista "Para" do número de teste e confirme o código.' : '';
+    throw new Error(`WhatsApp recusou (${data.error?.code ?? res.status}): ${data.error?.message ?? 'erro desconhecido'}.${hint}`);
   }
   return data.messages[0].id;
 }

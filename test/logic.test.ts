@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyText, normalizePhone, parseEvent, phoneKey } from '../src/parse';
+import { alternatePhone, classifyText, normalizePhone, parseEvent, phoneKey } from '../src/parse';
 import { DEFAULT_SETTINGS, loadSettings, parseWorkHours } from '../src/settings';
 import { findFreeSlots } from '../src/slots';
 import { addDays, atLocalTime, fmtLongDate, fmtSlot, localDateKey, zonedToUtc } from '../src/time';
@@ -28,6 +28,9 @@ describe('telefones e eventos', () => {
   });
   it('compara telefone com e sem o nono dígito', () => {
     expect(phoneKey('5511987654321')).toBe(phoneKey('551187654321'));
+    expect(alternatePhone('5511995436822')).toBe('551195436822');
+    expect(alternatePhone('551195436822')).toBe('5511995436822');
+    expect(alternatePhone('551132654321')).toBeNull();
   });
   it('lê título e descrição do Google Agenda', () => {
     const p = parseEvent('Maria Costa - Limpeza', 'Tel: (11) 98765-4321<br>Valor: R$ 180');

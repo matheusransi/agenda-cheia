@@ -9,6 +9,15 @@ export function normalizePhone(raw: string): string | null {
   return digits;
 }
 
+/** O mesmo celular brasileiro no outro formato: com o nono dígito vira sem, e vice-versa. */
+export function alternatePhone(phone: string): string | null {
+  const d = phone.replace(/\D/g, '');
+  if (!d.startsWith('55')) return null;
+  if (d.length === 13 && d[4] === '9') return d.slice(0, 4) + d.slice(5);
+  if (d.length === 12 && /[6-9]/.test(d[4])) return d.slice(0, 4) + '9' + d.slice(4);
+  return null;
+}
+
 /**
  * Chave usada para comparar telefones. O WhatsApp às vezes envia números brasileiros sem o nono dígito
  * (5511 8765-4321 em vez de 5511 98765-4321), então comparamos DDD + últimos 8 dígitos.
