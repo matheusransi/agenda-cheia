@@ -1,6 +1,6 @@
 // Permite instalar o portal como app. Os dados (/api) sempre vêm da internet;
 // só a "casca" do app fica guardada para abrir rápido e mostrar um aviso se estiver sem conexão.
-const CACHE = 'agenda-cheia-v1';
+const CACHE = 'agenda-cheia-v2';
 const SHELL = ['/', '/app.js', '/styles.css', '/manifest.webmanifest', '/icons/icon-192.png'];
 
 self.addEventListener('install', (event) => {

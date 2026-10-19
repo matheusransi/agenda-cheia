@@ -10,7 +10,7 @@ import { serviceAccount } from './google';
 import { send, windowOpen } from './messaging';
 import { normalizePhone, phoneKey } from './parse';
 import { DEFAULT_SETTINGS, mergeSettings } from './settings';
-import { HOUR, dayRange, localDateKey } from './time';
+import { HOUR, addDays, dayRange, localDateKey } from './time';
 import { checkConnection, parseWebhook, verifySignature, verifyToken, whatsappToken } from './whatsapp';
 
 type App = { Bindings: Env; Variables: { clinic: Clinic } };
@@ -112,7 +112,11 @@ app.get('/api/clinics/:id/day', async (c) => {
   const date = /^\d{4}-\d{2}-\d{2}$/.test(c.req.query('date') ?? '') ? c.req.query('date')! : localDateKey(new Date(now.getTime() + 24 * HOUR), clinic.timezone);
   const { start, end } = dayRange(date, clinic.timezone);
   const db = c.env.DB;
-  const [appts, waitlist, events, attention] = await Promise.all([
+  // Quantidade de consultas por dia na faixa de 7 dias mostrada no topo do painel.
+  const from = /^\d{4}-\d{2}-\d{2}$/.test(c.req.query('from') ?? '') ? c.req.query('from')! : date;
+  const weekStart = dayRange(from, clinic.timezone).start;
+  const weekEnd = dayRange(addDays(from, 6), clinic.timezone).end;
+  const [appts, waitlist, events, attention, week] = await Promise.all([
     db.prepare('SELECT * FROM appointments WHERE clinic_id = ? AND starts_at >= ? AND starts_at < ? ORDER BY starts_at, id')
       .bind(clinic.id, start.toISOString(), end.toISOString()).all<Appointment>(),
     db.prepare("SELECT * FROM waitlist WHERE clinic_id = ? AND (status != 'encaixado' OR created_at > ?) ORDER BY status = 'encaixado', created_at, id")
@@ -120,7 +124,14 @@ app.get('/api/clinics/:id/day', async (c) => {
     db.prepare('SELECT * FROM events WHERE clinic_id = ? ORDER BY created_at DESC, id DESC LIMIT 40').bind(clinic.id).all(),
     db.prepare("SELECT * FROM appointments WHERE clinic_id = ? AND starts_at > ? AND starts_at < ? AND status IN ('ligar','remarcar','vago','sem_telefone') ORDER BY starts_at LIMIT 30")
       .bind(clinic.id, now.toISOString(), new Date(now.getTime() + 8 * 24 * HOUR).toISOString()).all<Appointment>(),
+    db.prepare("SELECT starts_at FROM appointments WHERE clinic_id = ? AND starts_at >= ? AND starts_at < ? AND status != 'cancelado' AND status NOT IN ('vago','oferecido')")
+      .bind(clinic.id, weekStart.toISOString(), weekEnd.toISOString()).all<{ starts_at: string }>(),
   ]);
+  const counts: Record<string, number> = {};
+  for (const r of week.results) {
+    const k = localDateKey(new Date(r.starts_at), clinic.timezone);
+    counts[k] = (counts[k] ?? 0) + 1;
+  }
   return c.json({
     date,
     today: localDateKey(now, clinic.timezone),
@@ -129,6 +140,7 @@ app.get('/api/clinics/:id/day', async (c) => {
     waitlist: waitlist.results,
     events: events.results,
     attention: attention.results,
+    counts,
   });
 });
 

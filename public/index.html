@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Agenda Cheia</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230d5f6a'/%3E%3Cpath d='M9 17l5 5 9-11' stroke='white' stroke-width='3.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
-  <meta name="theme-color" content="#0d5f6a">
+  <link rel="icon" href="/icons/icon-192.png">
+  <meta name="theme-color" content="#0b3a40">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Agenda Cheia">
@@ -14,25 +14,38 @@
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <header class="topbar" id="topbar" hidden>
-    <div class="topbar-inner">
-      <span class="brand">Agenda Cheia</span>
-      <label class="clinic-pick">
-        <span class="sr-only">Clínica</span>
-        <select id="clinic-select"></select>
+  <div class="shell" id="shell" hidden>
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-mark" aria-hidden="true"></span><span>Agenda Cheia</span></div>
+      <label class="clinic-switch">
+        <span class="side-label">Clínica</span>
+        <select id="clinic-select" aria-label="Clínica"></select>
       </label>
-      <nav class="tabs">
-        <a href="#painel" data-view="painel">Painel</a>
-        <a href="#config" data-view="config">Configurações</a>
-      </nav>
-      <button type="button" class="btn ghost" id="logout">Sair</button>
-    </div>
-  </header>
-  <main class="wrap" id="app"></main>
+      <nav class="side-nav" id="side-nav"></nav>
+      <div class="side-foot">
+        <span class="mode-pill" id="mode-pill" hidden></span>
+        <button type="button" class="side-link" id="logout"></button>
+      </div>
+    </aside>
+
+    <header class="mobile-head">
+      <div class="brand"><span class="brand-mark" aria-hidden="true"></span></div>
+      <select id="clinic-select-m" aria-label="Clínica"></select>
+      <span class="mode-pill small" id="mode-pill-m" hidden></span>
+    </header>
+
+    <main class="main" id="app"></main>
+
+    <nav class="tabbar" id="tabbar"></nav>
+  </div>
+  <main class="auth" id="auth" hidden></main>
+
+  <div class="drawer-backdrop" id="drawer-backdrop" hidden></div>
+  <aside class="drawer" id="drawer" aria-hidden="true" aria-label="Conversa"></aside>
   <div class="toast" id="toast" role="status" hidden></div>
   <script src="/app.js"></script>
 </body>
