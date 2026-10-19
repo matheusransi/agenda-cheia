@@ -70,9 +70,24 @@ jobs:
         run: |
           npx wrangler deploy | tee deploy.log
           URL=$(grep -oE 'https://[a-zA-Z0-9.-]+\.workers\.dev' deploy.log | head -1)
+          if [ -z "$URL" ]; then
+            # Descobre (ou cria) o subdomínio *.workers.dev da conta para montar o endereço.
+            API="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/subdomain"
+            SUB=$(curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$API" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).result?.subdomain||"")}catch{console.log("")}})')
+            if [ -z "$SUB" ]; then
+              WANT=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr 'A-Z' 'a-z' | tr -cd 'a-z0-9-')
+              RES=$(curl -s -X PUT -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "content-type: application/json" -d "{\"subdomain\":\"$WANT\"}" "$API")
+              SUB=$(echo "$RES" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).result?.subdomain||"")}catch{console.log("")}})')
+              [ -z "$SUB" ] && echo "::warning::Não consegui criar o subdomínio workers.dev: $RES"
+              [ -n "$SUB" ] && npx wrangler deploy > /dev/null
+            fi
+            [ -n "$SUB" ] && URL="https://agenda-cheia.$SUB.workers.dev"
+          fi
           if [ -n "$URL" ]; then
             echo "### Portal publicado: $URL" >> "$GITHUB_STEP_SUMMARY"
             echo "::notice title=Portal publicado::$URL"
+          else
+            echo "::warning::Publicado, mas sem endereço workers.dev. Abra Compute > Workers & Pages no Cloudflare e escolha um subdomínio."
           fi
       - name: Enviar senhas e chaves para o Cloudflare
         if: steps.check.outputs.skip != 'true'
