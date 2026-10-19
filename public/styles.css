@@ -36,7 +36,8 @@
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html, body { margin: 0; }
-body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5; -webkit-tap-highlight-color: transparent; }
+input, select, textarea { font-size: 16px !important; } /* evita zoom automático no iPhone */
 h1, h2, h3 { font-family: var(--font-display); margin: 0; line-height: 1.15; text-wrap: balance; }
 h1 { font-size: clamp(26px, 4vw, 34px); font-weight: 700; letter-spacing: -0.02em; }
 h2 { font-size: 20px; font-weight: 700; }
@@ -57,7 +58,21 @@ a { color: var(--accent); }
 }
 
 /* Topo */
-.topbar { position: sticky; top: 0; z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+.topbar { position: sticky; top: 0; z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); padding-top: env(safe-area-inset-top, 0px); }
+@media (max-width: 560px) {
+  .topbar-inner { gap: 8px; }
+  .brand { font-size: 17px; }
+  .clinic-pick { flex: 1; min-width: 0; }
+  .clinic-pick select { max-width: none; }
+  .tabs { margin-left: 0; order: 3; width: 100%; }
+  .tabs a { flex: 1; text-align: center; }
+  #logout { padding-inline: 8px; }
+  .board-head { padding: 14px 16px; }
+  .toolbar { width: 100%; }
+  .toolbar .btn { flex: 1; }
+  .metric { padding: 10px 16px; }
+  .section-label { padding-inline: 16px; }
+}
 .topbar-inner {
   max-width: 1240px; margin: 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 10px;
@@ -177,7 +192,7 @@ label.check input { width: auto; }
 .log .bad { color: var(--bad); }
 
 /* Celular */
-.phone-col { display: flex; flex-direction: column; gap: 10px; position: sticky; top: 76px; }
+.phone-col { display: flex; flex-direction: column; gap: 10px; position: sticky; top: calc(76px + env(safe-area-inset-top, 0px)); }
 @media (max-width: 960px) { .phone-col { position: static; max-width: 400px; width: 100%; margin: 0 auto; } }
 .phone-caption { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .phone-caption strong { font-family: var(--font-display); font-weight: 500; font-size: 16px; }

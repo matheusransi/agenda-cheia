@@ -66,6 +66,7 @@ function toast(text, bad = false) {
 }
 
 async function api(path, opts = {}) {
+  if (!navigator.onLine) throw new Error('Sem internet. Confira a conexão do celular.');
   const res = await fetch(path, {
     method: opts.method || 'GET',
     headers: opts.body !== undefined ? { 'content-type': 'application/json' } : {},
@@ -690,5 +691,9 @@ $('#logout').addEventListener('click', async () => {
   await api('/api/logout', { method: 'POST', body: {} }).catch(() => null);
   showLogin();
 });
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+}
 
 start();

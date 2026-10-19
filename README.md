@@ -46,6 +46,15 @@ Vá em **Actions → Testar e publicar → Run workflow**. Quando terminar (fica
 
 A partir daí, toda mudança no código é publicada sozinha.
 
+### 1.5 Instalar no celular
+
+O portal funciona como aplicativo:
+
+- **Android (Chrome):** abra o endereço do portal e toque em **Instalar app** (ou no menu ⋮ → **Instalar app**).
+- **iPhone (Safari):** abra o endereço, toque em **Compartilhar** e depois em **Adicionar à Tela de Início**.
+
+O app ganha ícone próprio, abre em tela cheia e recebe as atualizações sozinho.
+
 ---
 
 ## 2. Testar sem WhatsApp e sem Google (modo teste)
