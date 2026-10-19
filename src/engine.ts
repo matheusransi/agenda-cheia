@@ -345,7 +345,8 @@ async function actionFromText(env: Env, clinic: Clinic, text: string, key: strin
 export async function handleInbound(
   env: Env, clinic: Clinic, from: string, input: { replyId?: string; text?: string; waId?: string }, now = new Date(),
 ): Promise<void> {
-  const phone = normalizePhone(from) ?? from.replace(/\D/g, '');
+  // Usa o número exatamente como o WhatsApp mandou (às vezes sem o nono dígito): é o formato que a Meta aceita na resposta.
+  const phone = from.replace(/\D/g, '') || from;
   const key = phoneKey(phone);
   const text = (input.text ?? '').trim();
 

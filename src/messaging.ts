@@ -20,6 +20,17 @@ function bodyOf(msg: Outgoing): string {
   return msg.kind === 'template' ? msg.preview : msg.text;
 }
 
+/**
+ * Número para onde enviar. Se o paciente já escreveu para a clínica, usa o número exatamente como o WhatsApp
+ * o identificou (com ou sem o nono dígito), porque a Meta recusa o outro formato em alguns casos.
+ */
+async function recipientFor(env: Env, clinic: Clinic, phone: string): Promise<string> {
+  const row = await env.DB.prepare(
+    "SELECT phone FROM messages WHERE clinic_id = ? AND phone_key = ? AND direction = 'in' ORDER BY created_at DESC, id DESC LIMIT 1",
+  ).bind(clinic.id, phoneKey(phone)).first<{ phone: string }>();
+  return row?.phone || phone;
+}
+
 /** Envia e registra. Nunca lança erro: falhas ficam gravadas na mensagem com status "erro". */
 export async function send(env: Env, clinic: Clinic, phone: string, msg: Outgoing, ctx: SendContext = {}): Promise<{ ok: boolean; error?: string }> {
   const buttons = msg.kind === 'text' ? null : JSON.stringify(msg.buttons ?? []);
@@ -29,7 +40,7 @@ export async function send(env: Env, clinic: Clinic, phone: string, msg: Outgoin
 
   if (!isSimulated(env, clinic)) {
     try {
-      waId = await sendWhatsApp(whatsappToken(env, clinic), clinic.wa_phone_number_id, phone, msg);
+      waId = await sendWhatsApp(whatsappToken(env, clinic), clinic.wa_phone_number_id, await recipientFor(env, clinic, phone), msg);
       status = 'enviado';
     } catch (e) {
       status = 'erro';
