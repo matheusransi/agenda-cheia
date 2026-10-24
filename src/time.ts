@@ -120,3 +120,4 @@ export function pad(n: number): string {
 
 export const HOUR = 3600_000;
 export const MINUTE = 60_000;
+export const DAY_MS = 24 * HOUR;

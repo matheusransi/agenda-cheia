@@ -91,9 +91,12 @@ Telas de gestão da clínica, além da agenda:
   - **Resumo**: dados de contato, documentos, endereço (o CEP preenche o resto), convênio, responsável (para menores), próximas consultas e histórico.
   - **Anamnese**: perguntas de saúde com Sim/Não e detalhes. Respostas como alergia, pressão alta ou diabetes viram um aviso vermelho na ficha e na conversa do WhatsApp.
   - **Odontograma**: toque num dente para marcar cárie, restauração, canal, coroa, implante, ausente etc. O pontinho azul mostra tratamento planejado num orçamento. Tem dentes de leite para crianças.
-  - **Orçamentos e pagamentos**: monte o plano de tratamento (procedimento, dente e valor, com desconto e parcelas). Ao **Aprovar**, as parcelas entram no Financeiro como contas a receber. Dá para marcar cada procedimento como feito e imprimir o orçamento.
+  - **Orçamentos**: monte o plano de tratamento (procedimento, dente e valor, com desconto e parcelas). Ao **Aprovar**, as parcelas entram no Financeiro como contas a receber. Dá para marcar cada procedimento como feito e imprimir o orçamento. O botão **Enviar para assinar** manda o orçamento pelo WhatsApp: quando o paciente assina no celular, o orçamento fica aprovado sozinho e as parcelas entram no Financeiro.
   - **Evoluções**: o que foi feito em cada atendimento, com data e hora.
+  - **Termos**: termos de consentimento (tratamento geral, canal, extração, implante, clareamento, aparelho), autorização de uso de imagem e termo de privacidade (LGPD), com o nome do paciente e da clínica já preenchidos. Dá para mudar o texto antes de enviar. O paciente recebe um link pelo WhatsApp, lê e **assina com o dedo** no celular, sem baixar nada. A ficha mostra quando foi enviado, aberto e assinado, e o botão **Ver comprovante** imprime o termo com a assinatura, nome, CPF, data, endereço de internet (IP), aparelho e um código que prova que o texto não mudou. O link vale 7 dias (reenviar renova o prazo).
+  - **Fotos e exames**: fotos clínicas, raio-X, exames, antes e depois e documentos (fotos ou PDF de até 1,5 MB). As fotos são reduzidas no próprio celular ou computador antes de subir, para não ocupar espaço. Dá para filtrar por tipo, pôr legenda, baixar e excluir.
   - **Documentos**: atestado, receita, declaração de comparecimento e ficha de anamnese, prontos para imprimir ou salvar em PDF.
+- **Cadastro pelo WhatsApp** (na tela Pacientes): a recepção digita só o nome e o WhatsApp; o paciente recebe a **ficha de entrada** para preencher os dados, o endereço, o convênio e as perguntas de saúde e assinar. Tudo entra direto na ficha dele, com os alertas de saúde. O botão **Enviar ficha de entrada** (aba Termos) faz o mesmo para quem já tem ficha.
 - **Financeiro**: mês a mês, com recebido, a receber, despesas e saldo; contas vencidas em destaque; botões **Receber** e **Pagar**; despesas por categoria e total de orçamentos esperando aprovação.
 
 Por enquanto essas telas só aparecem na demonstração. Para ligar numa clínica de verdade: **Configurações → Pacientes, orçamentos e financeiro → Mostrar estas telas no portal**. Na mesma tela ficam a **tabela de procedimentos** (um por linha, `Limpeza = 180`, usada como sugestão de nome e valor) e o **dentista responsável e CRO**, que saem nos documentos.
@@ -160,7 +163,7 @@ Em **WhatsApp → Configuração**, na parte de **Webhook**:
 
 ### 4.4 Modelos de mensagem
 
-Mensagens que a clínica inicia precisam de modelos aprovados. Em **WhatsApp Manager → Modelos de mensagem**, crie os três abaixo, com categoria **Utilidade** e idioma **Português (BR)**. Os nomes e a ordem das variáveis precisam ser exatamente estes:
+Mensagens que a clínica inicia precisam de modelos aprovados. Em **WhatsApp Manager → Modelos de mensagem**, crie os quatro abaixo, com categoria **Utilidade** e idioma **Português (BR)**. Os nomes e a ordem das variáveis precisam ser exatamente estes:
 
 **`confirmacao_consulta`**
 > Olá, {{1}}! Aqui é da {{2}}. Sua consulta de {{3}} está marcada para {{4}} às {{5}}. Você confirma?
@@ -178,6 +181,11 @@ Variáveis: 1 = primeiro nome, 2 = clínica, 3 = data, 4 = hora.
 > Oi, {{1}}! Lembrete: sua consulta na {{2}} é hoje às {{3}}. Endereço: {{4}}. Até logo!
 
 Sem botões. Variáveis: 1 = primeiro nome, 2 = clínica, 3 = hora, 4 = endereço.
+
+**`assinatura_documento`** (termos, ficha de entrada e orçamento para assinar)
+> Olá, {{1}}! A {{2}} enviou um documento para você ler e assinar pelo celular: {{3}}
+
+Sem botões. Variáveis: 1 = primeiro nome, 2 = clínica, 3 = link do documento. Se o paciente escreveu para a clínica nas últimas 24 horas, o sistema manda uma mensagem comum (sem modelo), com o texto certo para cada tipo de documento.
 
 Se você aprovar textos diferentes, atualize os nomes e textos em **Configurações → Modelos aprovados pela Meta**. A ordem das variáveis precisa continuar a mesma.
 
@@ -222,6 +230,7 @@ Estrutura:
 - `src/engine.ts`: regras (envios, respostas, remarcação, lista de espera, sincronização da agenda)
 - `src/google.ts` e `src/whatsapp.ts`: integrações
 - `src/records.ts`: pacientes, anamnese, odontograma, evoluções, orçamentos e financeiro (valores em centavos)
+- `src/signing.ts`: termos para assinar pelo celular (link público `/p/<código>`, página `public/assinar.html` e `public/assinar.js`), ficha de entrada e anexos (fotos e exames guardados no banco)
 - `src/settings.ts`: configurações padrão de cada clínica
 - `public/`: portal (HTML, CSS e JavaScript, sem framework); `public/gestao.js` tem as telas de pacientes e financeiro
 - `migrations/`: tabelas do banco D1

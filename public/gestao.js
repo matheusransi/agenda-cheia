@@ -153,7 +153,7 @@ function showPacientes(sub) {
   app.innerHTML = `
     <div class="page-head">
       <div><p class="eyebrow">Cadastro e prontuário</p><h1>Pacientes</h1></div>
-      <div class="actions"><a class="btn primary" href="#pacientes/novo">${icon('plus')}Novo paciente</a></div>
+      <div class="actions"><button class="btn" type="button" id="p-intake">${icon('send')}Cadastro pelo WhatsApp</button><a class="btn primary" href="#pacientes/novo">${icon('plus')}Novo paciente</a></div>
     </div>
     <div class="kpis" id="p-kpis"></div>
     <section class="card">
@@ -163,6 +163,7 @@ function showPacientes(sub) {
       </div>
       <ul class="plist" id="p-list"><li class="muted" style="padding:18px">Carregando...</li></ul>
     </section>`;
+  $('#p-intake').addEventListener('click', openIntakeDialog);
   $('#p-search').addEventListener('input', (e) => { state.pq = e.target.value; renderPatientList(); });
   $('#p-filters').addEventListener('click', (e) => { const b = e.target.closest('[data-f]'); if (b) { state.pfilter = b.dataset.f; renderPatientList(); } });
   if (state.patients) renderPatientList();
@@ -232,7 +233,8 @@ function renderPatientList() {
 
 async function showPatient(id, tab) {
   if (tab) state.ptab = tab;
-  if (!state.patient || state.patient.patient.id !== id) { state.ptab = tab || 'resumo'; state.patient = null; }
+  if (!state.patient || state.patient.patient.id !== id) { state.ptab = tab || state.nextTab || 'resumo'; state.patient = null; }
+  state.nextTab = null;
   app.innerHTML = '<p class="muted">Carregando ficha...</p>';
   const data = await act(() => api(`/api/clinics/${state.clinicId}/patients/${id}`));
   if (!data) { app.innerHTML = '<p class="muted">Ficha não encontrada. <a href="#pacientes">Voltar</a></p>'; return; }
@@ -254,8 +256,10 @@ function renderPatient() {
   const { patient: p, notes, budgets } = state.patient;
   const a = age(p.birth_date);
   const alerts = healthAlerts(p.anamnesis);
-  const tabs = [['resumo', 'Resumo', 'id'], ['anamnese', 'Anamnese', 'clipboard'], ['odonto', 'Odontograma', 'tooth'], ['tratamentos', 'Orçamentos e pagamentos', 'money'], ['evolucoes', 'Evoluções', 'file']];
-  const counts = { evolucoes: notes.length, tratamentos: budgets.length };
+  const { documents, attachments } = state.patient;
+  const tabs = [['resumo', 'Resumo', 'id'], ['anamnese', 'Anamnese', 'clipboard'], ['odonto', 'Odontograma', 'tooth'], ['tratamentos', 'Orçamentos', 'money'],
+    ['evolucoes', 'Evoluções', 'file'], ['termos', 'Termos', 'pen'], ['arquivos', 'Fotos e exames', 'image']];
+  const counts = { evolucoes: notes.length, tratamentos: budgets.length, termos: documents.length, arquivos: attachments.length };
   const scroll = window.scrollY;
   app.innerHTML = `
     <a class="back" href="#pacientes">${icon('left')}Pacientes</a>
@@ -275,11 +279,12 @@ function renderPatient() {
     ${alerts.length ? `<div class="alert-banner">${icon('heart')}<p><strong>Atenção na anamnese:</strong> ${esc(alerts.join(' · '))}</p></div>` : ''}
     <div class="ptabs" role="tablist">${tabs.map(([k, label, ic]) => `<button type="button" role="tab" class="${state.ptab === k ? 'on' : ''}" data-ptab="${k}">${icon(ic)}<span>${label}</span>${counts[k] ? `<small>${counts[k]}</small>` : ''}</button>`).join('')}</div>
     <div id="ptab"></div>
-    ${newDialogHtml()}${budgetDialogHtml()}${financeDialogHtml()}${docsDialogHtml()}`;
+    ${newDialogHtml()}${budgetDialogHtml()}${financeDialogHtml()}${docsDialogHtml()}${termDialogHtml()}`;
   bindNewDialog();
   bindBudgetDialog();
   bindFinanceDialog();
   bindDocsDialog();
+  bindTermDialog();
   $('#p-book').addEventListener('click', () => openNewDialog({ name: p.name, phone: p.phone }));
   $('#p-chat')?.addEventListener('click', () => openDrawer({ phone: p.phone, name: p.name }));
   $('#p-docs').addEventListener('click', openDocsDialog);
@@ -297,7 +302,7 @@ function renderPatient() {
 
 function renderPatientTab() {
   const box = $('#ptab');
-  ({ resumo: tabResumo, anamnese: tabAnamnese, odonto: tabOdonto, tratamentos: tabTratamentos, evolucoes: tabEvolucoes }[state.ptab] || tabResumo)(box);
+  ({ resumo: tabResumo, anamnese: tabAnamnese, odonto: tabOdonto, tratamentos: tabTratamentos, evolucoes: tabEvolucoes, termos: tabTermos, arquivos: tabArquivos }[state.ptab] || tabResumo)(box);
 }
 
 function tabResumo(box) {
@@ -345,8 +350,9 @@ function tabResumo(box) {
 function tabAnamnese(box) {
   const p = state.patient.patient;
   const a = json(p.anamnesis, {});
+  const byPatient = state.patient.documents.find((d) => d.kind === 'entrada' && d.status === 'assinado' && d.signed_at === p.anamnesis_at);
   box.innerHTML = `
-    <section class="card"><div class="card-head"><div><h2>Anamnese</h2><p class="hint">${p.anamnesis_at ? `Atualizada em ${fmt(p.anamnesis_at, { day: '2-digit', month: '2-digit', year: 'numeric' })}` : 'Ainda não preenchida'}. As respostas “Sim” em perguntas de saúde aparecem como alerta na ficha e na conversa.</p></div></div>
+    <section class="card"><div class="card-head"><div><h2>Anamnese</h2><p class="hint">${p.anamnesis_at ? `${byPatient ? 'Preenchida pelo próprio paciente no celular' : 'Atualizada'} em ${fmt(p.anamnesis_at, { day: '2-digit', month: '2-digit', year: 'numeric' })}` : 'Ainda não preenchida'}. As respostas “Sim” em perguntas de saúde aparecem como alerta na ficha e na conversa.</p></div></div>
       <form class="card-body" id="an-form">
         <label class="field">Queixa principal (o que trouxe o paciente)<textarea id="an-queixa" rows="2" placeholder="Ex.: dor ao mastigar do lado esquerdo">${esc(a.queixa?.d || '')}</textarea></label>
         <ul class="qlist">${ANAMNESE.map(([k, q, short]) => `<li class="${short ? 'alertq' : ''}${a[k]?.a === 'sim' && short ? ' alert' : ''}">
@@ -462,6 +468,7 @@ function budgetCard(b) {
   const doneN = b.items.filter((i) => i.done).length;
   const each = b.installments > 1 ? ` em ${b.installments}x de ${brlc(Math.floor(b.total / b.installments))}` : '';
   const button = (k, label, ic, cls = '') => `<button class="btn small ${cls}" type="button" data-bid="${b.id}" data-bact="${k}">${ic ? icon(ic) : ''}${label}</button>`;
+  const signDoc = (state.patient.documents || []).find((d) => d.budget_id === b.id && d.status !== 'cancelado');
   return `<section class="card budget">
     <div class="card-head"><div><h3>${esc(b.title || 'Orçamento')}</h3><p class="hint">Criado em ${fmt(b.created_at, { day: '2-digit', month: '2-digit', year: 'numeric' })}${b.approved_at ? ` · aprovado em ${fmt(b.approved_at, { day: '2-digit', month: '2-digit', year: 'numeric' })}` : ''}</p></div>${chip(BUDGET_STATUS[b.status] || [b.status, ''])}</div>
     <table class="items"><thead><tr>${b.status === 'aprovado' ? '<th class="c">Feito</th>' : ''}<th>Procedimento</th><th>Dente</th><th class="r">Valor</th></tr></thead><tbody>
@@ -472,9 +479,10 @@ function budgetCard(b) {
       <div class="grand"><span>Total</span><span>${brlc(b.total)}</span></div>
       <p class="hint">${esc([b.method, each.trim()].filter(Boolean).join(', ') || 'À vista')}${b.status === 'aprovado' ? ` · ${doneN} de ${b.items.length} feito${b.items.length > 1 ? 's' : ''}` : ''}</p>
       ${b.notes ? `<p class="hint">${esc(b.notes)}</p>` : ''}
+      ${signDoc ? `<p class="hint sign-state">${icon('pen')}${signDoc.status === 'assinado' ? `Assinado pelo paciente em ${esc(fmtDateTime(signDoc.signed_at))}` : `Enviado para assinar${signDoc.opened_at ? ' · o paciente já abriu o link' : ''}`}</p>` : ''}
     </div>
     <div class="actions budget-actions">
-      ${b.status === 'aberto' ? button('approve', 'Aprovar', 'check', 'primary') + button('edit', 'Editar', 'edit') + button('refuse', 'Recusado', 'x') : ''}
+      ${b.status === 'aberto' ? button('approve', 'Aprovar', 'check', 'primary') + button('sign', signDoc ? 'Reenviar para assinar' : 'Enviar para assinar', 'pen') + button('edit', 'Editar', 'edit') + button('refuse', 'Recusado', 'x') : ''}
       ${b.status === 'recusado' ? button('reopen', 'Reabrir', 'refresh') : ''}
       ${button('print', 'Imprimir', 'printer')}
       ${button('delete', 'Excluir', 'trash', 'ghost danger')}
@@ -505,6 +513,7 @@ async function budgetAction(id, kind, btn) {
   if (kind === 'edit') return openBudgetDialog(b);
   if (kind === 'print') return printBudget(b);
   if (kind === 'approve') return openApproveDialog(b);
+  if (kind === 'sign') return createSignDoc({ kind: 'orcamento', budget_id: b.id, send: true }, btn);
   if (kind === 'delete') {
     return confirmTwice(btn, async () => {
       if (await act(() => api(base, { method: 'DELETE' }), b.status === 'aprovado' ? 'Orçamento excluído. Parcelas não pagas saíram do financeiro.' : 'Orçamento excluído.')) reloadPatient();
@@ -716,6 +725,308 @@ function patientForm(p) {
     state.patient = null;
     location.hash = `#pacientes/${p ? p.id : r.id}`;
   });
+}
+
+// ---------- Termos e assinaturas pelo celular ----------
+
+const DOC_STATUS = { pendente: ['Aguardando assinatura', 'warn', 'clock'], assinado: ['Assinado', 'ok', 'check'], cancelado: ['Cancelado', '', 'x'], vencido: ['Link vencido', 'bad', 'alert'] };
+const DOC_KIND = { termo: 'Termo', entrada: 'Ficha de entrada', orcamento: 'Orçamento' };
+
+function fmtDateTime(iso) { return iso ? `${fmt(iso, { day: '2-digit', month: '2-digit', year: 'numeric' })} às ${fmtTime(iso)}` : ''; }
+function docLink(d) { return `${location.origin}/p/${d.token}`; }
+function docStatus(d) { return d.status === 'pendente' && d.expires_at < new Date().toISOString() ? 'vencido' : d.status; }
+
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); toast('Link copiado. Cole na conversa com o paciente.'); } catch { toast('Não deu para copiar. Selecione o link e copie.', true); }
+}
+
+function tabTermos(box) {
+  const { documents, patient: p } = state.patient;
+  const pending = documents.filter((d) => docStatus(d) === 'pendente').length;
+  box.innerHTML = `
+    <div class="row-head"><div><h2>Termos e assinaturas</h2><p class="hint">O paciente recebe um link pelo WhatsApp, lê e assina com o dedo na tela do celular. ${pending ? `${pending} aguardando assinatura.` : ''}</p></div>
+      <div class="actions"><button class="btn" type="button" id="t-entry">${icon('clipboard')}Enviar ficha de entrada</button><button class="btn primary" type="button" id="t-new">${icon('plus')}Novo termo</button></div></div>
+    ${documents.length ? `<div class="doc-list">${documents.map(docCard).join('')}</div>` : `<section class="card"><div class="empty-state"><span class="big">${icon('pen')}</span><strong>Nenhum termo enviado ainda</strong>
+      <span>Envie o termo de consentimento do tratamento, a autorização de imagem ou a ficha de entrada para ${esc(p.name.split(' ')[0])} preencher e assinar pelo celular.</span></div></section>`}`;
+  $('#t-new').addEventListener('click', () => openTermDialog('geral'));
+  $('#t-entry').addEventListener('click', () => openTermDialog('entrada'));
+  box.querySelectorAll('[data-dact]').forEach((b) => b.addEventListener('click', () => docAction(Number(b.dataset.did), b.dataset.dact, b)));
+}
+
+function docCard(d) {
+  const st = docStatus(d);
+  const steps = [
+    ['Criado', d.created_at], ['Enviado pelo WhatsApp', d.sent_at], ['Aberto pelo paciente', d.opened_at], ['Assinado', d.signed_at],
+  ].filter(([, at]) => at).map(([label, at]) => `<li>${icon('check')}<span>${label}</span><small>${esc(fmtDateTime(at))}</small></li>`).join('');
+  const button = (k, label, ic, cls = '') => `<button class="btn small ${cls}" type="button" data-did="${d.id}" data-dact="${k}">${icon(ic)}${label}</button>`;
+  return `<section class="card doc-card">
+    <div class="card-head"><div>${d.kind === 'entrada' ? '' : `<p class="eyebrow">${DOC_KIND[d.kind] || 'Documento'}</p>`}<h3>${esc(d.title)}</h3></div>${chip(DOC_STATUS[st])}</div>
+    <ul class="doc-steps">${steps}</ul>
+    ${d.status === 'assinado' ? `<div class="doc-signed"><img src="${esc(d.signature)}" alt="Assinatura de ${esc(d.signer_name)}"><p>${esc(d.signer_name)}<br><small>CPF ${esc(fmtCpf(d.signer_cpf))}</small></p></div>` : ''}
+    ${st === 'pendente' ? `<p class="hint">O link vale até ${esc(fmtDateTime(d.expires_at))}.</p>` : st === 'vencido' ? '<p class="hint">O prazo do link acabou. Reenvie para gerar um prazo novo.</p>' : ''}
+    <div class="actions">
+      ${st === 'pendente' || st === 'vencido' ? button('send', d.sent_at ? 'Reenviar pelo WhatsApp' : 'Enviar pelo WhatsApp', 'send', 'primary') + button('copy', 'Copiar link', 'copy') + button('open', 'Abrir', 'eye') + button('cancel', 'Cancelar', 'x', 'ghost danger') : ''}
+      ${d.status === 'assinado' ? button('print', 'Ver comprovante', 'printer') : ''}
+    </div>
+  </section>`;
+}
+
+async function docAction(id, kind, btn) {
+  const d = state.patient.documents.find((x) => x.id === id);
+  if (!d) return;
+  if (kind === 'copy') return copyText(docLink(d));
+  if (kind === 'open') return window.open(docLink(d), '_blank', 'noopener');
+  if (kind === 'print') return printSigned(d);
+  if (kind === 'cancel') {
+    return confirmTwice(btn, async () => {
+      if (await act(() => api(`/api/clinics/${state.clinicId}/documents/${id}/cancel`, { method: 'POST' }), 'Documento cancelado. O link deixou de funcionar.')) reloadPatient();
+    });
+  }
+  btn.disabled = true;
+  const r = await act(() => api(`/api/clinics/${state.clinicId}/documents/${id}/send`, { method: 'POST' }), isSimulated() ? 'Envio simulado (sem WhatsApp real). O link vale por mais 7 dias.' : 'Enviado pelo WhatsApp. O link vale por mais 7 dias.');
+  btn.disabled = false;
+  if (r) reloadPatient();
+}
+
+/** Cria o documento (termo, ficha ou orçamento) e, se pedido, já envia pelo WhatsApp. */
+async function createSignDoc(body, btn) {
+  if (btn) btn.disabled = true;
+  const r = await act(() => api(`/api/clinics/${state.clinicId}/patients/${state.patient.patient.id}/documents`, { method: 'POST', body }));
+  if (btn) btn.disabled = false;
+  if (!r) return null;
+  if (r.sent) toast(isSimulated() ? 'Envio simulado (sem WhatsApp real).' : 'Enviado pelo WhatsApp. Aqui na ficha aparece quando o paciente abrir e assinar.');
+  else if (body.send) toast(r.error || 'Não deu para enviar pelo WhatsApp. Copie o link e envie de outro jeito.', true);
+  if (body.kind === 'orcamento') reloadPatient();
+  else { state.ptab = 'termos'; await reloadPatient(); }
+  if (!r.sent || state.demo) showLinkDialog(r.link, 'Link para o paciente assinar');
+  return r;
+}
+
+function termDialogHtml() {
+  return `<dialog id="term-dialog" class="wide"><form id="term-form" method="dialog">
+    <div class="full"><h2>Enviar para assinar</h2><p class="hint">Escolha um modelo e ajuste o texto se precisar. O paciente recebe o link pelo WhatsApp e assina no celular, sem baixar nada.</p></div>
+    <label class="field full">Modelo<select id="tm-model"></select></label>
+    <label class="field full">Título<input id="tm-title" required maxlength="160"></label>
+    <label class="field full">Texto que o paciente vai ler<textarea id="tm-body" rows="11" required></textarea></label>
+    <p class="hint full" id="tm-entry-hint" hidden>${icon('clipboard')} Na ficha de entrada o paciente também preenche os dados pessoais, endereço, convênio e as perguntas de saúde. Tudo entra direto na ficha dele.</p>
+    <label class="check full"><input type="checkbox" id="tm-send" checked> Enviar agora pelo WhatsApp</label>
+    <div class="actions"><button class="btn ghost" type="button" id="tm-cancel">Cancelar</button><button class="btn primary" type="submit">${icon('send')}Criar link</button></div>
+  </form></dialog>`;
+}
+
+function bindTermDialog() {
+  const d = $('#term-dialog');
+  const pick = () => {
+    const m = (d._models || []).find((x) => x.key === $('#tm-model').value);
+    if (!m) return;
+    $('#tm-title').value = m.title;
+    $('#tm-body').value = m.body;
+    $('#tm-entry-hint').hidden = m.kind !== 'entrada';
+  };
+  $('#tm-model').addEventListener('change', pick);
+  $('#tm-cancel').addEventListener('click', () => d.close());
+  $('#term-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const m = d._models.find((x) => x.key === $('#tm-model').value);
+    const btn = d.querySelector('[type=submit]');
+    const r = await createSignDoc({ kind: m?.kind || 'termo', title: $('#tm-title').value, body: $('#tm-body').value, send: $('#tm-send').checked }, btn);
+    if (r) d.close();
+  });
+  d._pick = pick;
+}
+
+async function openTermDialog(key) {
+  const d = $('#term-dialog');
+  if (!d._models) {
+    d._models = await act(() => api(`/api/clinics/${state.clinicId}/patients/${state.patient.patient.id}/term-models`));
+    if (!d._models) return;
+    $('#tm-model').innerHTML = d._models.map((m) => `<option value="${m.key}">${esc(m.kind === 'entrada' ? 'Ficha de entrada (cadastro + saúde + termo)' : m.title)}</option>`).join('');
+  }
+  $('#tm-model').value = key;
+  d._pick();
+  $('#tm-send').checked = Boolean(state.patient.patient.phone);
+  d.showModal();
+}
+
+function showLinkDialog(link, title) {
+  const d = $('#link-dialog') || document.body.appendChild(Object.assign(document.createElement('dialog'), { id: 'link-dialog' }));
+  d.innerHTML = `<form method="dialog">
+    <div class="full"><h2>${esc(title)}</h2><p class="hint">${state.demo ? 'Na demonstração nada é enviado de verdade. Abra o link para ver o que o paciente vê no celular.' : 'Copie e mande para o paciente pelo WhatsApp da clínica ou por e-mail. O link vale por 7 dias.'}</p></div>
+    <input class="full link-box" readonly value="${esc(link)}" aria-label="Link">
+    <div class="actions"><button class="btn ghost" type="submit">Fechar</button><button class="btn" type="button" id="ld-copy">${icon('copy')}Copiar</button><a class="btn primary" href="${esc(link)}" target="_blank" rel="noopener">${icon('eye')}Abrir como paciente</a></div>
+  </form>`;
+  $('#ld-copy').addEventListener('click', () => copyText(link));
+  d.showModal();
+  d.querySelector('.link-box').select();
+}
+
+// Cadastro pelo WhatsApp: a recepção digita só nome e WhatsApp; o paciente preenche o resto no celular.
+function openIntakeDialog() {
+  const d = $('#intake-dialog') || document.body.appendChild(Object.assign(document.createElement('dialog'), { id: 'intake-dialog' }));
+  d.innerHTML = `<form method="dialog" id="in-form">
+    <div class="full"><h2>Cadastro pelo WhatsApp</h2><p class="hint">O paciente recebe um link para preencher os próprios dados e as perguntas de saúde e assinar o termo. Quando ele chegar, a ficha já está pronta.</p></div>
+    <label class="field full">Nome do paciente<input id="in-name" required autocomplete="off" placeholder="Ex.: Maria da Silva"></label>
+    <label class="field full">WhatsApp<input id="in-phone" required inputmode="tel" data-mask="phone" placeholder="(11) 98765-4321"></label>
+    <label class="check full"><input type="checkbox" id="in-send" checked> Enviar agora pelo WhatsApp</label>
+    <div class="actions"><button class="btn ghost" type="button" id="in-cancel">Cancelar</button><button class="btn primary" type="submit">${icon('send')}Enviar ficha</button></div>
+  </form>`;
+  $('#in-cancel').addEventListener('click', () => d.close());
+  $('#in-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = d.querySelector('[type=submit]');
+    btn.disabled = true;
+    const send = $('#in-send').checked;
+    const r = await act(() => api(`/api/clinics/${state.clinicId}/intake`, { method: 'POST', body: { name: $('#in-name').value, phone: $('#in-phone').value, send } }));
+    btn.disabled = false;
+    if (!r) return;
+    d.close();
+    if (r.sent) toast(isSimulated() ? 'Envio simulado (sem WhatsApp real). A ficha aparece aqui quando o paciente preencher.' : 'Ficha enviada pelo WhatsApp. Ela se completa sozinha quando o paciente preencher.');
+    else if (send) toast(r.error || 'Não deu para enviar pelo WhatsApp. Copie o link e envie de outro jeito.', true);
+    state.patients = null;
+    state.nextTab = 'termos';
+    location.hash = `#pacientes/${r.patient_id}`;
+    if (!r.sent || state.demo) setTimeout(() => showLinkDialog(r.link, 'Link da ficha de entrada'), 400);
+  });
+  d.showModal();
+}
+
+/** Comprovante da assinatura: texto assinado, desenho da assinatura e dados de quem assinou. */
+function printSigned(d) {
+  const paras = String(d.body).split(/\n{2,}/).map((t) => `<p>${esc(t).replace(/\n/g, '<br>')}</p>`).join('');
+  printDoc(d.title, `${paras}
+    ${d.kind === 'entrada' ? '<p class="small">Os dados pessoais e as respostas de saúde preenchidos pelo paciente estão na ficha dele (aba Anamnese).</p>' : ''}
+    <div class="sign"><span><img src="${esc(d.signature)}" alt="" style="max-height:90px;display:block;margin:0 auto 4px">${esc(d.signer_name)}<br><small>CPF ${esc(fmtCpf(d.signer_cpf))}</small></span></div>
+    <table class="small" style="margin-top:28px">
+      <tr><td>Assinado eletronicamente em</td><td>${esc(fmtDateTime(d.signed_at))}</td></tr>
+      <tr><td>Enviado ao paciente em</td><td>${esc(fmtDateTime(d.sent_at || d.created_at))}</td></tr>
+      <tr><td>Endereço IP</td><td>${esc(d.signed_ip || '—')}</td></tr>
+      <tr><td>Aparelho</td><td>${esc((d.signed_ua || '—').slice(0, 140))}</td></tr>
+      <tr><td>Código de verificação do texto (SHA-256)</td><td style="word-break:break-all">${esc(d.body_hash || '')}</td></tr>
+    </table>`, false);
+}
+
+// ---------- Fotos e exames ----------
+
+const ATTACH_CATEGORIES = ['Foto clínica', 'Raio-X', 'Exame', 'Antes e depois', 'Documento', 'Outro'];
+
+function attachUrl(a, extra = '') { return `/api/clinics/${state.clinicId}/attachments/${a.id}${extra}`; }
+function fmtSize(n) { return n >= 1e6 ? `${(n / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`; }
+
+function tabArquivos(box) {
+  const { attachments } = state.patient;
+  state.afilter = state.afilter || 'Todos';
+  const cats = ['Todos', ...ATTACH_CATEGORIES.filter((c) => attachments.some((a) => a.category === c))];
+  if (!cats.includes(state.afilter)) state.afilter = 'Todos';
+  const shown = attachments.filter((a) => state.afilter === 'Todos' || a.category === state.afilter);
+  box.innerHTML = `
+    <div class="row-head"><div><h2>Fotos e exames</h2><p class="hint">Fotos clínicas, raio-X, exames e documentos do paciente. As fotos são reduzidas automaticamente para não ocupar espaço.</p></div>
+      <label class="btn primary file-btn">${icon('upload')}Adicionar arquivos<input type="file" id="a-file" accept="image/*,application/pdf" multiple hidden></label></div>
+    ${attachments.length ? `<div class="filters" id="a-filters">${cats.map((c) => `<button type="button" class="fchip${state.afilter === c ? ' on' : ''}" data-cat="${esc(c)}">${esc(c)}<span>${c === 'Todos' ? attachments.length : attachments.filter((a) => a.category === c).length}</span></button>`).join('')}</div>
+      <div class="gallery">${shown.map((a) => `<button type="button" class="gitem" data-att="${a.id}">
+        ${a.has_thumb || a.mime.startsWith('image/') ? `<img loading="lazy" src="${attachUrl(a, '?thumb')}" alt="${esc(a.caption || a.name)}">` : `<span class="gfile">${icon('file')}<small>PDF</small></span>`}
+        <span class="gcap"><strong>${esc(a.caption || a.category)}</strong><small>${esc(a.category)} · ${fmt(a.created_at, { day: '2-digit', month: '2-digit', year: '2-digit' })}</small></span>
+      </button>`).join('')}</div>`
+    : `<label class="card drop" for="a-file"><span class="big">${icon('image')}</span><strong>Nenhum arquivo ainda</strong><span>Toque aqui para adicionar fotos (do celular ou do computador), raio-X ou exames em PDF.</span></label>`}`;
+  $('#a-file').addEventListener('change', (e) => { if (e.target.files.length) openUploadDialog([...e.target.files]); e.target.value = ''; });
+  $('#a-filters')?.addEventListener('click', (e) => { const b = e.target.closest('[data-cat]'); if (b) { state.afilter = b.dataset.cat; tabArquivos(box); } });
+  box.querySelectorAll('[data-att]').forEach((b) => b.addEventListener('click', () => openAttachment(Number(b.dataset.att))));
+}
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(',')[1] || '');
+    r.onerror = () => reject(new Error('Não deu para ler o arquivo.'));
+    r.readAsDataURL(blob);
+  });
+}
+
+/** Reduz a foto no próprio navegador (lado maior até `max` px, JPEG). */
+async function shrinkImage(source, max, quality) {
+  const scale = Math.min(1, max / Math.max(source.width, source.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(source.width * scale);
+  canvas.height = Math.round(source.height * scale);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+  return new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
+}
+
+async function prepareFile(file) {
+  if (file.type === 'application/pdf') {
+    if (file.size > 1_500_000) throw new Error(`“${file.name}” tem mais de 1,5 MB. Reduza o PDF antes de enviar.`);
+    return { name: file.name, mime: file.type, data: await blobToBase64(file), thumb: '' };
+  }
+  if (!file.type.startsWith('image/')) throw new Error(`“${file.name}” não é foto nem PDF.`);
+  let bmp;
+  try { bmp = await createImageBitmap(file); } catch { throw new Error(`Não deu para abrir a foto “${file.name}”. Tente tirar um print ou salvar como JPG.`); }
+  const [big, small] = await Promise.all([shrinkImage(bmp, 1600, 0.82), shrinkImage(bmp, 360, 0.7)]);
+  bmp.close?.();
+  return { name: file.name.replace(/\.\w+$/, '') + '.jpg', mime: 'image/jpeg', data: await blobToBase64(big), thumb: await blobToBase64(small) };
+}
+
+function openUploadDialog(files) {
+  const d = $('#upload-dialog') || document.body.appendChild(Object.assign(document.createElement('dialog'), { id: 'upload-dialog' }));
+  const guess = (f) => (f.type === 'application/pdf' ? 'Exame' : /rx|raio|panor|periap/i.test(f.name) ? 'Raio-X' : 'Foto clínica');
+  d.innerHTML = `<form method="dialog" id="up-form">
+    <div class="full"><h2>Adicionar ${files.length > 1 ? `${files.length} arquivos` : 'arquivo'}</h2><p class="hint">Escolha o tipo e, se quiser, escreva uma legenda (ex.: “Antes do clareamento”, “Panorâmica inicial”).</p></div>
+    <ul class="full up-list">${files.map((f, i) => `<li>
+      ${f.type.startsWith('image/') ? `<img alt="" data-prev="${i}">` : `<span class="gfile">${icon('file')}</span>`}
+      <div><select data-upcat="${i}" aria-label="Tipo">${ATTACH_CATEGORIES.map((c) => `<option${c === guess(f) ? ' selected' : ''}>${c}</option>`).join('')}</select>
+      <input data-upcap="${i}" maxlength="300" placeholder="Legenda (opcional)" aria-label="Legenda"><small class="muted">${esc(f.name)} · ${fmtSize(f.size)}</small></div>
+    </li>`).join('')}</ul>
+    <div class="actions"><span class="hint" id="up-state"></span><button class="btn ghost" type="button" id="up-cancel">Cancelar</button><button class="btn primary" type="submit">${icon('upload')}Salvar na ficha</button></div>
+  </form>`;
+  const urls = [];
+  files.forEach((f, i) => { const img = d.querySelector(`[data-prev="${i}"]`); if (img) { const u = URL.createObjectURL(f); urls.push(u); img.src = u; } });
+  const close = () => { urls.forEach((u) => URL.revokeObjectURL(u)); d.close(); };
+  $('#up-cancel').addEventListener('click', close);
+  $('#up-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = d.querySelector('[type=submit]');
+    btn.disabled = true;
+    let ok = 0;
+    for (const [i, f] of files.entries()) {
+      $('#up-state').textContent = `Enviando ${i + 1} de ${files.length}...`;
+      const r = await act(async () => {
+        const prepared = await prepareFile(f);
+        return api(`/api/clinics/${state.clinicId}/patients/${state.patient.patient.id}/attachments`, {
+          method: 'POST', body: { ...prepared, category: d.querySelector(`[data-upcat="${i}"]`).value, caption: d.querySelector(`[data-upcap="${i}"]`).value },
+        });
+      });
+      if (r) ok++;
+    }
+    btn.disabled = false;
+    if (ok) toast(ok > 1 ? `${ok} arquivos salvos na ficha.` : 'Arquivo salvo na ficha.');
+    close();
+    state.ptab = 'arquivos';
+    reloadPatient();
+  });
+  d.showModal();
+}
+
+function openAttachment(id) {
+  const a = state.patient.attachments.find((x) => x.id === id);
+  if (!a) return;
+  const d = $('#att-dialog') || document.body.appendChild(Object.assign(document.createElement('dialog'), { id: 'att-dialog', className: 'wide' }));
+  const isImg = a.mime.startsWith('image/');
+  d.innerHTML = `<form method="dialog" id="att-form">
+    <div class="full att-view">${isImg ? `<img src="${attachUrl(a)}" alt="${esc(a.caption || a.name)}">` : `<a class="btn" href="${attachUrl(a)}" target="_blank" rel="noopener">${icon('file')}Abrir o PDF</a>`}</div>
+    <label class="field">Tipo<select id="att-cat">${ATTACH_CATEGORIES.map((c) => `<option${c === a.category ? ' selected' : ''}>${c}</option>`).join('')}</select></label>
+    <label class="field">Legenda<input id="att-cap" maxlength="300" value="${esc(a.caption)}"></label>
+    <p class="hint full">${esc(a.name)} · ${fmtSize(a.size)} · adicionado em ${esc(fmtDateTime(a.created_at))}</p>
+    <div class="actions"><button class="btn ghost danger" type="button" id="att-del">${icon('trash')}Excluir</button><a class="btn" href="${attachUrl(a, '?download')}">${icon('download')}Baixar</a><button class="btn primary" type="submit">${icon('check')}Salvar</button></div>
+  </form>`;
+  $('#att-del').addEventListener('click', (e) => confirmTwice(e.currentTarget, async () => {
+    if (await act(() => api(attachUrl(a), { method: 'DELETE' }), 'Arquivo excluído.')) { d.close(); reloadPatient(); }
+  }));
+  $('#att-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (await act(() => api(attachUrl(a), { method: 'PUT', body: { category: $('#att-cat').value, caption: $('#att-cap').value } }), 'Arquivo atualizado.')) { d.close(); reloadPatient(); }
+  });
+  d.showModal();
 }
 
 // ---------- Documentos para imprimir ----------

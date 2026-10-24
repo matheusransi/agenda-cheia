@@ -27,6 +27,7 @@ export type Settings = {
     confirm: { name: string; preview: string };
     offer: { name: string; preview: string };
     reminder: { name: string; preview: string };
+    sign: { name: string; preview: string };
   };
   texts: {
     confirmed: string;
@@ -87,6 +88,10 @@ export const DEFAULT_SETTINGS: Settings = {
     reminder: {
       name: 'lembrete_consulta',
       preview: 'Oi, {nome}! Lembrete: sua consulta na {clinica} é hoje às {hora}. Endereço: {endereco}. Até logo!',
+    },
+    sign: {
+      name: 'assinatura_documento',
+      preview: 'Olá, {nome}! A {clinica} enviou um documento para você ler e assinar pelo celular: {link}',
     },
   },
   texts: {

@@ -41,7 +41,7 @@ export function isValidCpf(raw: string): boolean {
 }
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const isDate = (v: string) => DATE_RE.test(v) && !Number.isNaN(new Date(v + 'T12:00:00Z').getTime());
+export const isDate = (v: string) => DATE_RE.test(v) && !Number.isNaN(new Date(v + 'T12:00:00Z').getTime());
 
 const TEXT_FIELDS: Array<[keyof Patient, number]> = [
   ['email', 120], ['sex', 20], ['profession', 80], ['address', 200], ['neighborhood', 80], ['city', 80],
@@ -210,11 +210,27 @@ export async function ensurePatient(env: Env, clinicId: number, name: string | n
 const fail = (c: Context, status: 400 | 404 | 409, error: string) => c.json({ error }, status);
 const today = (c: Context<AppEnv>) => localDateKey(new Date(), c.get('clinic').timezone);
 
-async function getPatient(env: Env, clinicId: number, id: number): Promise<Patient | null> {
+/** Aprova o orçamento e lança as parcelas no financeiro (contas a receber). Retorna quantas parcelas foram lançadas. */
+export async function approveBudget(env: Env, clinic: Clinic, b: Budget, firstDue: string, how = ''): Promise<number> {
+  const p = await getPatient(env, clinic.id, b.patient_id);
+  const parsed = parseBudget(b);
+  const plan = parsed.total > 0 ? installmentPlan(parsed.total, b.installments, firstDue) : [];
+  const label = parsed.title || parsed.items.map((i) => i.proc).slice(0, 2).join(', ');
+  await env.DB.batch([
+    env.DB.prepare("UPDATE budgets SET status = 'aprovado', approved_at = ?, updated_at = ? WHERE id = ?").bind(nowIso(), nowIso(), b.id),
+    ...plan.map((x, i) => env.DB.prepare(
+      "INSERT INTO finance (clinic_id, kind, description, category, amount, due_date, method, patient_id, budget_id) VALUES (?, 'receita', ?, 'Tratamento', ?, ?, ?, ?, ?)",
+    ).bind(clinic.id, `${label}${plan.length > 1 ? ` (${i + 1}/${plan.length})` : ''}`, x.amount, x.due, b.method, b.patient_id, b.id)),
+  ]);
+  await logEvent(env, clinic.id, `Orçamento de ${p?.name ?? 'paciente'} aprovado${how}: ${plan.length} parcela(s) lançada(s) no financeiro.`, 'ok');
+  return plan.length;
+}
+
+export async function getPatient(env: Env, clinicId: number, id: number): Promise<Patient | null> {
   return env.DB.prepare('SELECT * FROM patients WHERE clinic_id = ? AND id = ?').bind(clinicId, id).first<Patient>();
 }
 
-function parseBudget(b: Budget) {
+export function parseBudget(b: Budget) {
   let items: BudgetItem[] = [];
   try { items = JSON.parse(b.items); } catch { items = []; }
   return { ...b, items, total: budgetTotal({ items, discount: b.discount }) };
@@ -270,14 +286,20 @@ export function registerRecords(app: Hono<AppEnv>): void {
     const p = await getPatient(c.env, clinic.id, Number(c.req.param('pid')));
     if (!p) return fail(c, 404, 'Paciente não encontrado.');
     const db = c.env.DB;
-    const [appts, notes, budgets, finance] = await Promise.all([
+    const [appts, notes, budgets, finance, documents, attachments] = await Promise.all([
       db.prepare(`SELECT a.* FROM appointments a, patients p WHERE p.id = ? AND a.clinic_id = ? AND a.kind = 'consulta' AND ${APPT_MATCH}
         ORDER BY a.starts_at DESC LIMIT 200`).bind(p.id, clinic.id).all<Appointment>(),
       db.prepare('SELECT * FROM patient_notes WHERE clinic_id = ? AND patient_id = ? ORDER BY created_at DESC, id DESC LIMIT 300').bind(clinic.id, p.id).all(),
       db.prepare('SELECT * FROM budgets WHERE clinic_id = ? AND patient_id = ? ORDER BY created_at DESC, id DESC').bind(clinic.id, p.id).all<Budget>(),
       db.prepare('SELECT * FROM finance WHERE clinic_id = ? AND patient_id = ? ORDER BY due_date, id').bind(clinic.id, p.id).all<FinanceEntry>(),
+      db.prepare('SELECT * FROM documents WHERE clinic_id = ? AND patient_id = ? ORDER BY created_at DESC, id DESC').bind(clinic.id, p.id).all(),
+      db.prepare('SELECT id, name, mime, size, category, caption, created_at, thumb IS NOT NULL AS has_thumb FROM attachments WHERE clinic_id = ? AND patient_id = ? ORDER BY created_at DESC, id DESC')
+        .bind(clinic.id, p.id).all(),
     ]);
-    return c.json({ patient: p, appointments: appts.results, notes: notes.results, budgets: budgets.results.map(parseBudget), finance: finance.results });
+    return c.json({
+      patient: p, appointments: appts.results, notes: notes.results, budgets: budgets.results.map(parseBudget), finance: finance.results,
+      documents: documents.results, attachments: attachments.results,
+    });
   });
 
   // Atualiza o cadastro (quando vem `name`), a anamnese (`anamnesis`) e/ou o odontograma (`odontogram`).
@@ -310,6 +332,8 @@ export function registerRecords(app: Hono<AppEnv>): void {
     if (!p) return fail(c, 404, 'Paciente não encontrado.');
     await c.env.DB.batch([
       c.env.DB.prepare('DELETE FROM patient_notes WHERE patient_id = ?').bind(p.id),
+      c.env.DB.prepare('DELETE FROM documents WHERE patient_id = ?').bind(p.id),
+      c.env.DB.prepare('DELETE FROM attachments WHERE patient_id = ?').bind(p.id),
       c.env.DB.prepare('DELETE FROM budgets WHERE patient_id = ?').bind(p.id),
       c.env.DB.prepare('UPDATE finance SET patient_id = NULL, budget_id = NULL WHERE patient_id = ?').bind(p.id),
       c.env.DB.prepare('DELETE FROM patients WHERE id = ?').bind(p.id),
@@ -383,20 +407,9 @@ export function registerRecords(app: Hono<AppEnv>): void {
     const b = await getBudget(c);
     if (!b) return fail(c, 404, 'Orçamento não encontrado.');
     if (b.status === 'aprovado') return fail(c, 409, 'Este orçamento já foi aprovado.');
-    const p = await getPatient(c.env, clinic.id, b.patient_id);
     const { first_due } = await c.req.json<{ first_due?: string }>().catch(() => ({ first_due: undefined }));
-    const first = first_due && isDate(first_due) ? first_due : today(c);
-    const parsed = parseBudget(b);
-    const plan = parsed.total > 0 ? installmentPlan(parsed.total, b.installments, first) : [];
-    const label = parsed.title || parsed.items.map((i) => i.proc).slice(0, 2).join(', ');
-    await c.env.DB.batch([
-      c.env.DB.prepare("UPDATE budgets SET status = 'aprovado', approved_at = ?, updated_at = ? WHERE id = ?").bind(nowIso(), nowIso(), b.id),
-      ...plan.map((x, i) => c.env.DB.prepare(
-        "INSERT INTO finance (clinic_id, kind, description, category, amount, due_date, method, patient_id, budget_id) VALUES (?, 'receita', ?, 'Tratamento', ?, ?, ?, ?, ?)",
-      ).bind(clinic.id, `${label}${plan.length > 1 ? ` (${i + 1}/${plan.length})` : ''}`, x.amount, x.due, b.method, b.patient_id, b.id)),
-    ]);
-    await logEvent(c.env, clinic.id, `Orçamento de ${p?.name ?? 'paciente'} aprovado: ${plan.length} parcela(s) lançada(s) no financeiro.`, 'ok');
-    return c.json({ ok: true, installments: plan.length });
+    const installments = await approveBudget(c.env, clinic, b, first_due && isDate(first_due) ? first_due : today(c));
+    return c.json({ ok: true, installments });
   });
 
   // Excluir: as parcelas ainda não pagas saem do financeiro; as pagas ficam.

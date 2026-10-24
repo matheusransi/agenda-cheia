@@ -1,8 +1,11 @@
 // Demonstração: cada visitante do link /demo ganha uma clínica própria com dados fictícios, em modo teste.
 // Nada sai pelo WhatsApp (ver isSimulated) e as clínicas de demonstração são apagadas depois de 1 dia.
-import type { Env } from './db';
+import type { Clinic, Env } from './db';
+import type { Budget, Patient } from './records';
 import { fillTemplate, firstName, phoneKey } from './parse';
+import { panoramicSvg, periapicalSvg, scanSvg, signatureDataUrl, smileSvg } from './demo-files';
 import { DEFAULT_SETTINGS, type Settings } from './settings';
+import { ENTRY_BODY, ENTRY_TITLE, TERM_MODELS, budgetText, sha256 } from './signing';
 import { HOUR, MINUTE, addDays, atLocalTime, fmtLongDate, fmtSlot, fmtTime, localDateKey } from './time';
 
 export const DEMO_TTL_HOURS = 24;
@@ -17,7 +20,7 @@ export async function cleanupDemos(env: Env, now = new Date()): Promise<void> {
   const cutoff = new Date(now.getTime() - DEMO_TTL_HOURS * HOUR).toISOString();
   const old = 'SELECT id FROM clinics WHERE demo = 1 AND created_at < ?';
   await env.DB.batch([
-    ...['messages', 'events', 'waitlist', 'appointments', 'patient_notes', 'budgets', 'finance', 'patients'].map((t) => env.DB.prepare(`DELETE FROM ${t} WHERE clinic_id IN (${old})`).bind(cutoff)),
+    ...['messages', 'events', 'waitlist', 'appointments', 'patient_notes', 'documents', 'attachments', 'budgets', 'finance', 'patients'].map((t) => env.DB.prepare(`DELETE FROM ${t} WHERE clinic_id IN (${old})`).bind(cutoff)),
     env.DB.prepare('DELETE FROM clinics WHERE demo = 1 AND created_at < ?').bind(cutoff),
   ]);
 }
@@ -419,5 +422,60 @@ async function seedRecords(env: Env, cid: number, now: Date, seeds: Seed[], wait
   note('Camila Ferreira', 60, 'Avaliação para implante na região do 46. Pedido de tomografia. Amamentando: adiar cirurgia até liberação médica.');
   note('Carlos Eduardo Lima', 12, 'Avaliação: cárie oclusal no 25. Restauração em resina marcada. Orientado a reduzir o cigarro.');
   note('Marta Siqueira', 230, 'Profilaxia. Sem cáries. Retorno em 6 meses (paciente não voltou; chamar para revisão).');
+  await env.DB.batch(stmts);
+  await seedSigning(env, cid, now, pid, rows, bid(1));
+}
+
+/** Termos assinados e pendentes e arquivos (raio-X, fotos) de exemplo na demonstração. */
+async function seedSigning(env: Env, cid: number, now: Date, pid: Record<string, number>, rows: Array<{ name: string; cpf: string }>, renataBudget: number): Promise<void> {
+  const ago = (days: number) => new Date(now.getTime() - days * 24 * HOUR).toISOString();
+  const settings = { ...DEFAULT_SETTINGS, dentist_name: 'Dra. Helena Prado', dentist_cro: 'CRO-SP 00000' } as Settings;
+  const clinic = { id: cid, name: NAME, address: ADDRESS, timezone: TZ, settings } as unknown as Clinic;
+  const cpfOf = (who: string) => rows.find((r) => r.name === who)?.cpf ?? '';
+  const vars = (who: string) => ({ paciente: `${who}, CPF ${cpfOf(who).replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')}`, clinica: NAME, dentista: 'Dra. Helena Prado (CRO-SP 00000)', data: '' });
+  const model = (key: string) => TERM_MODELS.find((m) => m.key === key)!;
+  const token = () => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(18)))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+  type D = { who: string; kind: 'termo' | 'entrada' | 'orcamento'; title: string; body: string; sent: number; opened?: number; signed?: number; budget?: number };
+  const docs: D[] = [
+    { who: 'Lucas Almeida', kind: 'entrada', title: ENTRY_TITLE, body: fillTemplate(ENTRY_BODY, vars('Lucas Almeida')), sent: 31, opened: 31, signed: 31 },
+    { who: 'Lucas Almeida', kind: 'termo', title: model('canal').title, body: fillTemplate(model('canal').body, vars('Lucas Almeida')), sent: 30, opened: 29.9, signed: 29.9 },
+    { who: 'Ana Beatriz Souza', kind: 'termo', title: model('imagem').title, body: fillTemplate(model('imagem').body, vars('Ana Beatriz Souza')), sent: 181, opened: 180.9, signed: 180.9 },
+    { who: 'Camila Ferreira', kind: 'termo', title: model('implante').title, body: fillTemplate(model('implante').body, vars('Camila Ferreira')), sent: 1 },
+    { who: 'Aline Duarte', kind: 'entrada', title: ENTRY_TITLE, body: fillTemplate(ENTRY_BODY, vars('Aline Duarte')), sent: 2, opened: 1.5 },
+  ];
+  const renata = await env.DB.prepare('SELECT * FROM budgets WHERE id = ?').bind(renataBudget).first<Budget>();
+  const renataP = await env.DB.prepare('SELECT * FROM patients WHERE id = ?').bind(pid['Renata Araújo']).first<Patient>();
+  if (renata && renataP) docs.push({ who: 'Renata Araújo', kind: 'orcamento', title: `Orçamento: ${renata.title}`, body: budgetText(clinic, renataP, renata), sent: 2, opened: 1, budget: renata.id });
+
+  const ua = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
+  const stmts: D1PreparedStatement[] = [];
+  for (const [i, d] of docs.entries()) {
+    if (!pid[d.who]) continue;
+    const signed = d.signed !== undefined;
+    stmts.push(env.DB.prepare(
+      `INSERT INTO documents (clinic_id, patient_id, budget_id, kind, title, body, token, status, sent_at, opened_at, expires_at, signer_name, signer_cpf, signature, signed_at, signed_ip, signed_ua, body_hash, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(cid, pid[d.who], d.budget ?? null, d.kind, d.title, d.body, token(), signed ? 'assinado' : 'pendente', ago(d.sent), d.opened !== undefined ? ago(d.opened) : null,
+      ago(d.sent - 7), signed ? d.who : null, signed ? cpfOf(d.who) : null, signed ? signatureDataUrl(d.who) : null, signed ? ago(d.signed!) : null,
+      signed ? `177.${40 + i}.${(i * 37) % 250}.${(i * 91) % 250}` : null, signed ? ua : null, signed ? await sha256(`${d.title}\n\n${d.body}`) : null, ago(d.sent)));
+  }
+
+  type F = { who: string; name: string; category: string; caption: string; data: Uint8Array; days: number };
+  const files: F[] = [
+    { who: 'Lucas Almeida', name: 'periapical-36-inicial.svg', category: 'Raio-X', caption: 'Periapical do 36 (avaliação)', data: periapicalSvg(false), days: 30 },
+    { who: 'Lucas Almeida', name: 'periapical-36-canal.svg', category: 'Raio-X', caption: 'Periapical do 36 após 1ª sessão de canal', data: periapicalSvg(true), days: 14 },
+    { who: 'Lucas Almeida', name: 'panoramica.svg', category: 'Raio-X', caption: 'Panorâmica inicial', data: panoramicSvg(12, [0, 15]), days: 30 },
+    { who: 'Renata Araújo', name: 'panoramica.svg', category: 'Raio-X', caption: 'Panorâmica: ausência do 35 e 36', data: panoramicSvg(-1, [19, 20, 26]), days: 90 },
+    { who: 'Renata Araújo', name: 'foto-inicial.svg', category: 'Foto clínica', caption: 'Foto inicial do sorriso', data: smileSvg(0.3, 'Inicial'), days: 90 },
+    { who: 'Camila Ferreira', name: 'tomografia.svg', category: 'Exame', caption: 'Tomografia da região do 46', data: scanSvg(), days: 45 },
+    { who: 'Ana Beatriz Souza', name: 'antes-clareamento.svg', category: 'Antes e depois', caption: 'Antes do clareamento', data: smileSvg(0, 'Antes'), days: 175 },
+    { who: 'Ana Beatriz Souza', name: 'depois-clareamento.svg', category: 'Antes e depois', caption: 'Depois do clareamento (3 semanas)', data: smileSvg(1, 'Depois'), days: 150 },
+  ];
+  for (const f of files) {
+    if (!pid[f.who]) continue;
+    stmts.push(env.DB.prepare('INSERT INTO attachments (clinic_id, patient_id, name, mime, size, category, caption, data, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .bind(cid, pid[f.who], f.name, 'image/svg+xml', f.data.length, f.category, f.caption, f.data, ago(f.days)));
+  }
   await env.DB.batch(stmts);
 }
