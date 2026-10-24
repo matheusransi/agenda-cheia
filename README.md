@@ -75,11 +75,28 @@ No modo teste nenhuma mensagem real sai. Tudo aparece no portal como se tivesse 
 Envie o endereço do portal com `/demo` no final, por exemplo `https://agenda-cheia.SEU-SUBDOMINIO.workers.dev/demo`.
 
 - Abre **sem senha**, direto numa clínica fictícia (“Clínica Sorriso”) com consultas da semana, confirmações, remarcação, lista de espera e atividade.
+- A demonstração já vem com as telas de gestão ligadas (veja a seção 2.2): 34 fichas de pacientes, anamneses, odontogramas, orçamentos e o caixa do mês.
 - Cada pessoa que abre o link ganha **a sua própria cópia**: o que um interessado mexe não aparece para outro, e ninguém vê as suas clínicas de verdade.
 - Nenhuma mensagem sai pelo WhatsApp e não dá para ligar o WhatsApp nem o Google Agenda na demonstração.
 - O visitante pode tocar num paciente e responder como se fosse ele, para ver o sistema reagindo.
 - O botão **Recomeçar** (ou o endereço `/demo?novo`) volta tudo ao início. Cada demonstração é apagada sozinha depois de 1 dia.
 - Se você abrir o link no seu próprio celular, o portal passa a mostrar a demonstração. Para voltar à sua conta, toque em **Sair da demonstração** e entre de novo com a senha.
+
+### 2.2 Pacientes, orçamentos e financeiro (novidade em teste)
+
+Telas de gestão da clínica, além da agenda:
+
+- **Pacientes**: lista com busca (nome, telefone ou CPF) e filtros: com consulta marcada, sem retorno há 6 meses (para chamar para revisão), aniversariantes do mês e alerta de saúde. Quem ganha consulta ou entra na lista de espera recebe uma ficha simples sozinho; o botão **Trazer da agenda** cria fichas para quem já tinha consulta.
+- **Ficha do paciente**:
+  - **Resumo**: dados de contato, documentos, endereço (o CEP preenche o resto), convênio, responsável (para menores), próximas consultas e histórico.
+  - **Anamnese**: perguntas de saúde com Sim/Não e detalhes. Respostas como alergia, pressão alta ou diabetes viram um aviso vermelho na ficha e na conversa do WhatsApp.
+  - **Odontograma**: toque num dente para marcar cárie, restauração, canal, coroa, implante, ausente etc. O pontinho azul mostra tratamento planejado num orçamento. Tem dentes de leite para crianças.
+  - **Orçamentos e pagamentos**: monte o plano de tratamento (procedimento, dente e valor, com desconto e parcelas). Ao **Aprovar**, as parcelas entram no Financeiro como contas a receber. Dá para marcar cada procedimento como feito e imprimir o orçamento.
+  - **Evoluções**: o que foi feito em cada atendimento, com data e hora.
+  - **Documentos**: atestado, receita, declaração de comparecimento e ficha de anamnese, prontos para imprimir ou salvar em PDF.
+- **Financeiro**: mês a mês, com recebido, a receber, despesas e saldo; contas vencidas em destaque; botões **Receber** e **Pagar**; despesas por categoria e total de orçamentos esperando aprovação.
+
+Por enquanto essas telas só aparecem na demonstração. Para ligar numa clínica de verdade: **Configurações → Pacientes, orçamentos e financeiro → Mostrar estas telas no portal**. Na mesma tela ficam a **tabela de procedimentos** (um por linha, `Limpeza = 180`, usada como sugestão de nome e valor) e o **dentista responsável e CRO**, que saem nos documentos.
 
 ---
 
@@ -204,6 +221,7 @@ Estrutura:
 - `src/index.ts`: rotas da API, webhook e execução agendada
 - `src/engine.ts`: regras (envios, respostas, remarcação, lista de espera, sincronização da agenda)
 - `src/google.ts` e `src/whatsapp.ts`: integrações
+- `src/records.ts`: pacientes, anamnese, odontograma, evoluções, orçamentos e financeiro (valores em centavos)
 - `src/settings.ts`: configurações padrão de cada clínica
-- `public/`: portal (HTML, CSS e JavaScript, sem framework)
+- `public/`: portal (HTML, CSS e JavaScript, sem framework); `public/gestao.js` tem as telas de pacientes e financeiro
 - `migrations/`: tabelas do banco D1

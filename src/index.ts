@@ -10,13 +10,13 @@ import { cancelAppointment, createAppointment, handleInbound, isSimulated, runCy
 import { serviceAccount } from './google';
 import { send, windowOpen } from './messaging';
 import { normalizePhone, phoneKey } from './parse';
+import { type AppEnv, ensurePatient, registerRecords } from './records';
 import { DEFAULT_SETTINGS, mergeSettings } from './settings';
 import { HOUR, addDays, dayRange, localDateKey } from './time';
 import { checkConnection, parseWebhook, verifySignature, verifyToken, whatsappToken } from './whatsapp';
 
-// `demo`: ID da clínica de demonstração do visitante (link /demo), ou null para quem entrou com a senha.
-type App = { Bindings: Env; Variables: { clinic: Clinic; demo: number | null } };
-const app = new Hono<App>();
+// Variáveis: `demo` é o ID da clínica de demonstração do visitante (link /demo), ou null para quem entrou com a senha.
+const app = new Hono<AppEnv>();
 
 const fail = (c: Context, status: 400 | 401 | 403 | 404 | 409 | 500, error: string) => c.json({ error }, status);
 
@@ -247,6 +247,7 @@ app.post('/api/clinics/:id/appointments', async (c) => {
     patient: b.patient.trim(), phone: (b.phone ?? '').trim(), procedure: (b.procedure ?? '').trim(),
     value: Number.isFinite(value) ? value : null, date: b.date, time: b.time, duration: Number(b.duration) || 60,
   });
+  await ensurePatient(c.env, clinic.id, b.patient.trim(), normalizePhone(b.phone ?? ''));
   return c.json({ id });
 });
 
@@ -268,6 +269,7 @@ app.post('/api/clinics/:id/waitlist', async (c) => {
   await c.env.DB.prepare('INSERT INTO waitlist (clinic_id, name, phone, procedure, preference, value) VALUES (?, ?, ?, ?, ?, ?)')
     .bind(clinic.id, b.name.trim(), phone, (b.procedure ?? '').trim(), (b.preference ?? '').trim(), Number.isFinite(value) ? value : null).run();
   await logEvent(c.env, clinic.id, `${b.name.trim()} entrou na lista de espera.`);
+  await ensurePatient(c.env, clinic.id, b.name.trim(), phone);
   return c.json({ ok: true });
 });
 
@@ -283,6 +285,10 @@ app.delete('/api/clinics/:id/waitlist/:wid', async (c) => {
   await c.env.DB.prepare('DELETE FROM waitlist WHERE id = ?').bind(wid).run();
   return c.json({ ok: true });
 });
+
+// ---------- Pacientes, orçamentos e financeiro (src/records.ts) ----------
+
+registerRecords(app);
 
 // ---------- Webhook do WhatsApp ----------
 

@@ -17,7 +17,7 @@ export async function cleanupDemos(env: Env, now = new Date()): Promise<void> {
   const cutoff = new Date(now.getTime() - DEMO_TTL_HOURS * HOUR).toISOString();
   const old = 'SELECT id FROM clinics WHERE demo = 1 AND created_at < ?';
   await env.DB.batch([
-    ...['messages', 'events', 'waitlist', 'appointments'].map((t) => env.DB.prepare(`DELETE FROM ${t} WHERE clinic_id IN (${old})`).bind(cutoff)),
+    ...['messages', 'events', 'waitlist', 'appointments', 'patient_notes', 'budgets', 'finance', 'patients'].map((t) => env.DB.prepare(`DELETE FROM ${t} WHERE clinic_id IN (${old})`).bind(cutoff)),
     env.DB.prepare('DELETE FROM clinics WHERE demo = 1 AND created_at < ?').bind(cutoff),
   ]);
 }
@@ -37,6 +37,10 @@ export async function createDemoClinic(env: Env, now = new Date()): Promise<numb
   const settings: Settings = {
     ...DEFAULT_SETTINGS,
     test_mode: true,
+    // Telas de gestão (pacientes, orçamentos, financeiro) ligadas: a demonstração é onde elas são testadas primeiro.
+    modules_beta: true,
+    dentist_name: 'Dra. Helena Prado',
+    dentist_cro: 'CRO-SP 00000',
     // Aberta todos os dias, para a demonstração nunca cair num dia vazio.
     work_hours: { '0': '08:00-12:00', '1': '08:00-12:00, 13:00-19:00', '2': '08:00-12:00, 13:00-19:00', '3': '08:00-12:00, 13:00-19:00', '4': '08:00-12:00, 13:00-19:00', '5': '08:00-12:00, 13:00-19:00', '6': '08:00-13:00' },
   };
@@ -88,6 +92,17 @@ export async function createDemoClinic(env: Env, now = new Date()): Promise<numb
 
     { key: 'felipe', day: 5, time: '10:00', name: 'Felipe Cunha', phone: phone(27), procedure: 'Limpeza', value: 180, status: 'agendado' },
     { key: 'natalia', day: 5, time: '14:00', name: 'Natália Prado', phone: phone(28), procedure: 'Implante (consulta)', value: 1200, status: 'agendado' },
+    { key: 'lucas2', day: 6, time: '17:00', name: 'Lucas Almeida', phone: phone(9), procedure: 'Tratamento de canal (2ª sessão)', value: null, status: 'agendado' },
+
+    // Histórico (consultas antigas), para a ficha do paciente mostrar a linha do tempo.
+    { key: 'h-ana', day: -180, time: '09:00', name: 'Ana Beatriz Souza', phone: phone(3), procedure: 'Limpeza', value: 180, status: 'confirmado' },
+    { key: 'h-lucas1', day: -30, time: '16:00', name: 'Lucas Almeida', phone: phone(9), procedure: 'Avaliação', value: 120, status: 'confirmado' },
+    { key: 'h-lucas2', day: -14, time: '17:00', name: 'Lucas Almeida', phone: phone(9), procedure: 'Tratamento de canal (1ª sessão)', value: null, status: 'confirmado' },
+    { key: 'h-renata', day: -90, time: '14:00', name: 'Renata Araújo', phone: phone(20), procedure: 'Avaliação', value: 120, status: 'confirmado' },
+    { key: 'h-camila', day: -60, time: '11:00', name: 'Camila Ferreira', phone: phone(12), procedure: 'Avaliação', value: 120, status: 'confirmado' },
+    { key: 'h-carlos', day: -12, time: '09:00', name: 'Carlos Eduardo Lima', phone: phone(4), procedure: 'Avaliação', value: 120, status: 'confirmado' },
+    { key: 'h-marta', day: -230, time: '10:00', name: 'Marta Siqueira', phone: phone(32), procedure: 'Limpeza', value: 180, status: 'confirmado' },
+    { key: 'h-jorge', day: -400, time: '15:00', name: 'Jorge Batista', phone: phone(33), procedure: 'Avaliação', value: 120, status: 'confirmado' },
   ];
 
   const inserted = await env.DB.batch(seeds.map((s) => {
@@ -234,5 +249,175 @@ export async function createDemoClinic(env: Env, now = new Date()): Promise<numb
   upd('patricia', { confirm_sent_at: ago(sent), replied_at: ago(12) });
   upd('vaga', { offered_to: wid.rafael, offered_ids: String(wid.rafael) });
   await env.DB.batch(stmts);
+  await seedRecords(env, cid, now, seeds, waits);
   return cid;
+}
+
+// ---------- Fichas, orçamentos e financeiro da demonstração ----------
+
+const FEMALE = new Set(['Ana', 'Cláudia', 'Juliana', 'Fernanda', 'Mariana', 'Camila', 'Larissa', 'Eduarda', 'Sofia', 'Isabela', 'Renata',
+  'Helena', 'Patrícia', 'Beatriz', 'Simone', 'Natália', 'Aline', 'Marta']);
+const STREETS = ['Rua das Palmeiras', 'Av. dos Ipês', 'Rua Monte Azul', 'Rua das Hortênsias', 'Av. Brasil Novo', 'Rua do Mirante', 'Rua Jasmim', 'Alameda dos Pinheiros'];
+const HOODS = ['Centro', 'Jardim Primavera', 'Vila Nova', 'Bela Vista', 'Parque das Flores'];
+const PROFESSIONS = ['Professor', 'Engenheiro', 'Comerciante', 'Administrador', 'Estudante', 'Vendedor', 'Enfermeiro', 'Advogado', 'Aposentado', 'Designer'];
+const PROFESSIONS_F = ['Professora', 'Engenheira', 'Comerciante', 'Administradora', 'Estudante', 'Vendedora', 'Enfermeira', 'Advogada', 'Aposentada', 'Designer'];
+const INSURANCE = ['Particular', 'Particular', 'Plano Dental Bem-Estar', 'Particular', 'Convênio Empresa Alfa'];
+const REFERRAL = ['Indicação de amigo', 'Instagram', 'Google', 'Indicação de amigo', 'Convênio', 'Passou na frente'];
+
+/** CPF fictício, mas com os dígitos verificadores certos (passa na validação do cadastro). */
+function fakeCpf(n: number): string {
+  const d = String(100000000 + ((n * 7919113) % 899999999)).slice(0, 9).split('').map(Number);
+  for (const len of [9, 10]) {
+    let sum = 0;
+    for (let i = 0; i < len; i++) sum += d[i] * (len + 1 - i);
+    d.push(((sum * 10) % 11) % 10);
+  }
+  return d.join('');
+}
+
+const slug = (name: string) => name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().split(' ').filter((_, i, a) => i === 0 || i === a.length - 1).join('.');
+
+async function seedRecords(env: Env, cid: number, now: Date, seeds: Seed[], waits: Array<{ name: string; phone: string }>): Promise<void> {
+  const today = localDateKey(now, TZ);
+  const [year, month] = today.split('-').map(Number);
+  const ago = (days: number) => new Date(now.getTime() - days * 24 * HOUR).toISOString();
+
+  // Uma ficha para cada nome da agenda e da lista de espera.
+  const people = new Map<string, string | null>();
+  for (const s of seeds) if (s.name && !people.has(s.name)) people.set(s.name, s.phone);
+  for (const w of waits) if (!people.has(w.name)) people.set(w.name, w.phone);
+  const names = [...people.keys()];
+
+  const special: Record<string, Record<string, string>> = {
+    'Gabriel Oliveira': { birth_date: `${year - 15}-03-14`, profession: 'Estudante', guardian_name: 'Márcia Oliveira', guardian_phone: '5511988887777' },
+    // Dois aniversariantes no mês, para o filtro "Aniversariantes" ter exemplos.
+    'Mariana Ribeiro': { birth_date: `${year - 29}-${String(month).padStart(2, '0')}-${today.slice(8) > '20' ? '02' : '27'}` },
+    'Pedro Henrique Rocha': { birth_date: `${year - 41}-${String(month).padStart(2, '0')}-${String(Math.min(28, Number(today.slice(8)))).padStart(2, '0')}` },
+  };
+  const yes = (d = '') => ({ a: 'sim', d });
+  const no = { a: 'nao', d: '' };
+  const allNo = (extra: Record<string, { a: string; d: string }> = {}) => ({
+    tratamento: no, medicamentos: no, alergia: no, anestesia: no, pressao: no, diabetes: no, coracao: no, sangramento: no,
+    gestante: no, fumante: no, infeccao: no, cirurgia: no, ...extra,
+  });
+  const anamnesis: Record<string, object> = {
+    'Lucas Almeida': allNo({ queixa: { a: '', d: 'Dor forte no dente de baixo, lado esquerdo, ao mastigar.' }, alergia: yes('Penicilina'), sensibilidade: yes('Água gelada') }),
+    'Renata Araújo': allNo({ queixa: { a: '', d: 'Quer repor os dentes que faltam do lado esquerdo.' }, pressao: yes('Controlada, usa losartana'), medicamentos: yes('Losartana 50 mg'), tratamento: yes('Cardiologista') }),
+    'Otávio Freitas': allNo({ diabetes: yes('Tipo 2, controlada com metformina'), medicamentos: yes('Metformina') }),
+    'Camila Ferreira': allNo({ queixa: { a: '', d: 'Perdeu um dente do fundo e quer fazer implante.' }, gestante: yes('Amamentando (bebê de 4 meses)') }),
+    'Marcos Teixeira': allNo({ coracao: yes('Arritmia, acompanhamento com cardiologista'), medicamentos: yes('Anticoagulante'), sangramento: yes('Usa anticoagulante') }),
+    'Ana Beatriz Souza': allNo({ sangra_gengiva: yes('Às vezes, na parte de baixo') }),
+    'Carlos Eduardo Lima': allNo({ fumante: yes('10 cigarros por dia') }),
+    'Sofia Barbosa': allNo({ sensibilidade: yes('Depois de clarear em casa') }),
+    'Fernanda Costa': allNo(),
+    'Mariana Ribeiro': allNo(),
+    'Juliana Martins': allNo(),
+  };
+  const odontogram: Record<string, object> = {
+    'Lucas Almeida': { 36: { s: 'canal', n: 'Canal em andamento (2ª sessão marcada)' }, 46: { s: 'restaurado', n: '' }, 18: { s: 'ausente', n: '' }, 28: { s: 'ausente', n: '' } },
+    'Ana Beatriz Souza': { 16: { s: 'restaurado', n: 'Resina' }, 26: { s: 'restaurado', n: 'Resina' } },
+    'Renata Araújo': { 35: { s: 'ausente', n: '' }, 36: { s: 'ausente', n: '' }, 46: { s: 'fratura', n: 'Fratura na cúspide, indicar coroa' }, 17: { s: 'restaurado', n: 'Amálgama antiga' } },
+    'Carlos Eduardo Lima': { 25: { s: 'carie', n: 'Cárie na face oclusal' }, 37: { s: 'restaurado', n: '' } },
+    'Camila Ferreira': { 46: { s: 'ausente', n: 'Extraído há 2 anos' }, 11: { s: 'coroa', n: '' } },
+    'Natália Prado': { 36: { s: 'implante', n: 'Implante de 2023' }, 48: { s: 'extrair', n: 'Siso incluso' } },
+    'Marcos Teixeira': { 47: { s: 'carie', n: '' }, 14: { s: 'canal', n: 'Canal antigo' } },
+  };
+
+  const rows = names.map((name, i) => {
+    const first = name.split(' ')[0];
+    const female = FEMALE.has(first);
+    const age = 22 + ((i * 11) % 45);
+    const p = people.get(name) ?? '';
+    const sp = special[name] ?? {};
+    return {
+      name, phone: p, phone_key: p ? phoneKey(p) : '', cpf: name === 'Diego Moreira' ? '' : fakeCpf(i + 3),
+      birth_date: sp.birth_date ?? `${year - age}-${String(((i * 5) % 12) + 1).padStart(2, '0')}-${String(((i * 7) % 27) + 1).padStart(2, '0')}`,
+      sex: female ? 'Feminino' : 'Masculino', email: p ? `${slug(name)}@exemplo.com` : '', profession: sp.profession ?? (female ? PROFESSIONS_F : PROFESSIONS)[i % PROFESSIONS.length],
+      cep: `0${String(1000000 + i * 3571).slice(0, 7)}`, address: `${STREETS[i % STREETS.length]}, ${40 + i * 17}`, neighborhood: HOODS[i % HOODS.length],
+      city: 'São Paulo', state: 'SP', insurance: INSURANCE[i % INSURANCE.length],
+      insurance_number: INSURANCE[i % INSURANCE.length] === 'Particular' ? '' : `00${(i * 48271) % 999999}`.slice(-8),
+      guardian_name: sp.guardian_name ?? '', guardian_phone: sp.guardian_phone ?? '', referral: REFERRAL[i % REFERRAL.length],
+      notes: name === 'Marcos Teixeira' ? 'Prefere horários no fim da tarde. Avisar antes de qualquer procedimento com sangramento (usa anticoagulante).' : '',
+      anamnesis: JSON.stringify(anamnesis[name] ?? {}), anamnesis_at: anamnesis[name] ? ago(10 + (i % 20)) : null,
+      odontogram: JSON.stringify(odontogram[name] ?? {}), created_at: ago(30 + i * 9),
+    };
+  });
+  const cols = Object.keys(rows[0]) as Array<keyof (typeof rows)[number]>;
+  const pInserted = await env.DB.batch(rows.map((r) => env.DB.prepare(
+    `INSERT INTO patients (clinic_id, ${cols.join(', ')}) VALUES (?, ${cols.map(() => '?').join(', ')}) RETURNING id`,
+  ).bind(cid, ...cols.map((k) => r[k]))));
+  const pid: Record<string, number> = {};
+  names.forEach((n, i) => { pid[n] = (pInserted[i].results[0] as { id: number }).id; });
+
+  // Orçamentos (valores em centavos).
+  type B = { who: string; title: string; status: string; items: Array<{ proc: string; tooth: string; value: number; done?: boolean }>; discount: number; installments: number; method: string; created: number; approved?: number; notes?: string };
+  const budgets: B[] = [
+    { who: 'Lucas Almeida', title: 'Canal e restauração do 36', status: 'aprovado', created: 30, approved: 29, discount: 5000, installments: 3, method: 'Cartão de crédito',
+      items: [{ proc: 'Tratamento de canal', tooth: '36', value: 90000, done: false }, { proc: 'Restauração em resina', tooth: '36', value: 25000 }] },
+    { who: 'Renata Araújo', title: 'Prótese e coroa', status: 'aberto', created: 88, discount: 0, installments: 6, method: 'Boleto', notes: 'Paciente vai pensar e retornar.',
+      items: [{ proc: 'Prótese parcial removível', tooth: '35, 36', value: 180000 }, { proc: 'Coroa de porcelana', tooth: '46', value: 150000 }] },
+    { who: 'Camila Ferreira', title: 'Implante do 46', status: 'aberto', created: 58, discount: 20000, installments: 10, method: 'Cartão de crédito',
+      items: [{ proc: 'Implante', tooth: '46', value: 280000 }, { proc: 'Coroa sobre implante', tooth: '46', value: 150000 }] },
+    { who: 'Carlos Eduardo Lima', title: 'Restauração do 25', status: 'aprovado', created: 12, approved: 12, discount: 0, installments: 1, method: 'Pix',
+      items: [{ proc: 'Restauração em resina', tooth: '25', value: 25000 }] },
+    { who: 'Bruno Carvalho', title: 'Aparelho ortodôntico', status: 'recusado', created: 40, discount: 0, installments: 12, method: 'Boleto', notes: 'Achou caro, vai voltar no ano que vem.',
+      items: [{ proc: 'Instalação do aparelho fixo', tooth: '', value: 120000 }, { proc: 'Manutenção mensal (12x)', tooth: '', value: 180000 }] },
+  ];
+  const bInserted = await env.DB.batch(budgets.map((b) => env.DB.prepare(
+    'INSERT INTO budgets (clinic_id, patient_id, title, status, items, discount, installments, method, notes, approved_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
+  ).bind(cid, pid[b.who], b.title, b.status, JSON.stringify(b.items.map((x) => ({ ...x, done: x.done ?? false }))), b.discount, b.installments, b.method,
+    b.notes ?? '', b.approved ? ago(b.approved) : null, ago(b.created), ago(b.approved ?? b.created))));
+  const bid = (i: number) => (bInserted[i].results[0] as { id: number }).id;
+
+  const stmts: D1PreparedStatement[] = [];
+  const fin = (kind: 'receita' | 'despesa', description: string, category: string, reais: number, due: string, paid: string | null, method = '', who: string | null = null, budget: number | null = null) => {
+    stmts.push(env.DB.prepare('INSERT INTO finance (clinic_id, kind, description, category, amount, due_date, paid_at, method, patient_id, budget_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .bind(cid, kind, description, category, Math.round(reais * 100), due, paid, method, who ? pid[who] : null, budget));
+  };
+  const day = (n: number) => addDays(today, n);
+  const ofMonth = (d: number) => `${today.slice(0, 8)}${String(d).padStart(2, '0')}`;
+  const paidIfPast = (key: string) => (key <= today ? key : null);
+
+  // Parcelas do orçamento aprovado do Lucas (R$ 1.100 em 3x) e do Carlos (Pix, pago).
+  fin('receita', 'Canal e restauração do 36 (1/3)', 'Tratamento', 366.68, day(-29), day(-29), 'Cartão de crédito', 'Lucas Almeida', bid(0));
+  fin('receita', 'Canal e restauração do 36 (2/3)', 'Tratamento', 366.66, day(1), null, 'Cartão de crédito', 'Lucas Almeida', bid(0));
+  fin('receita', 'Canal e restauração do 36 (3/3)', 'Tratamento', 366.66, day(31), null, 'Cartão de crédito', 'Lucas Almeida', bid(0));
+  fin('receita', 'Restauração do 25', 'Tratamento', 250, day(0), null, 'Pix', 'Carlos Eduardo Lima', bid(3));
+  // Consultas pagas no dia.
+  fin('receita', 'Limpeza', 'Consulta', 180, day(-1), day(-1), 'Pix', 'Paulo Mendonça');
+  fin('receita', 'Restauração', 'Consulta', 250, day(-1), day(-1), 'Cartão de débito', 'Cláudia Reis');
+  fin('receita', 'Limpeza', 'Consulta', 180, day(0), day(0), 'Dinheiro', 'Ana Beatriz Souza');
+  fin('receita', 'Avaliação', 'Consulta', 120, day(-12), day(-12), 'Pix', 'Carlos Eduardo Lima');
+  fin('receita', 'Avaliação', 'Consulta', 120, day(-30), day(-30), 'Dinheiro', 'Lucas Almeida');
+  fin('receita', 'Avaliação', 'Consulta', 120, day(-45), null, 'Boleto', 'Jorge Batista');
+  // Atendimentos pagos nos dias anteriores do mês (para o caixa da demonstração ter movimento).
+  const sales: Array<[string, number]> = [['Limpeza', 180], ['Restauração', 250], ['Clareamento', 600], ['Avaliação', 120], ['Manutenção do aparelho', 150], ['Tratamento de canal', 900], ['Limpeza', 180], ['Extração', 350]];
+  const payWith = ['Pix', 'Cartão de débito', 'Dinheiro', 'Cartão de crédito', 'Pix'];
+  for (let d = 1, k = 0; d < Number(today.slice(8)) - 1; d++) {
+    for (let j = 0; j < 2; j++, k++) {
+      const [proc, value] = sales[k % sales.length];
+      const who = names[(k * 7) % names.length];
+      fin('receita', proc, 'Consulta', value, ofMonth(d), ofMonth(d), payWith[k % payWith.length], who);
+    }
+  }
+  // Despesas do mês.
+  fin('despesa', 'Aluguel da sala', 'Aluguel', 3500, ofMonth(5), paidIfPast(ofMonth(5)), 'Transferência');
+  fin('despesa', 'Material odontológico (resinas, luvas, anestésicos)', 'Material', 1240.5, ofMonth(10), paidIfPast(ofMonth(10)), 'Boleto');
+  fin('despesa', 'Conta de luz', 'Contas da clínica', 382.9, ofMonth(15), paidIfPast(ofMonth(15)), 'Débito automático');
+  fin('despesa', 'Laboratório de prótese', 'Laboratório', 850, day(5), null, 'Pix');
+  fin('despesa', 'Salário da auxiliar', 'Salários', 2200, ofMonth(28), paidIfPast(ofMonth(28)), 'Transferência');
+  fin('despesa', 'Internet e telefone', 'Contas da clínica', 149.9, day(-3), null, 'Boleto');
+
+  // Evoluções do prontuário.
+  const note = (who: string, daysAgo: number, text: string) => stmts.push(
+    env.DB.prepare('INSERT INTO patient_notes (clinic_id, patient_id, text, created_at) VALUES (?, ?, ?, ?)').bind(cid, pid[who], text, ago(daysAgo)),
+  );
+  note('Ana Beatriz Souza', 180, 'Profilaxia e aplicação de flúor. Gengivite leve na região inferior; orientada sobre o uso do fio dental. Retorno em 6 meses.');
+  note('Lucas Almeida', 30, 'Avaliação: dor espontânea no 36. Raio-X periapical mostra lesão próxima à polpa. Indicado tratamento de canal. Orçamento entregue e aprovado.');
+  note('Lucas Almeida', 14, 'Canal do 36, 1ª sessão: abertura, odontometria e medicação intracanal. Paciente sem dor no fim do atendimento. Alergia a penicilina: receitado outro antibiótico.');
+  note('Renata Araújo', 90, 'Avaliação para prótese: ausência do 35 e do 36, fratura no 46. Planejada prótese parcial removível e coroa no 46. Pressão aferida: 13x8.');
+  note('Camila Ferreira', 60, 'Avaliação para implante na região do 46. Pedido de tomografia. Amamentando: adiar cirurgia até liberação médica.');
+  note('Carlos Eduardo Lima', 12, 'Avaliação: cárie oclusal no 25. Restauração em resina marcada. Orientado a reduzir o cigarro.');
+  note('Marta Siqueira', 230, 'Profilaxia. Sem cáries. Retorno em 6 meses (paciente não voltou; chamar para revisão).');
+  await env.DB.batch(stmts);
 }

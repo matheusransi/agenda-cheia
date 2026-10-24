@@ -27,6 +27,18 @@ const ICONS = {
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
   moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
   spark: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8"/>',
+  id: '<rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="11" r="2.5"/><path d="M5.5 16.5a3.5 3.5 0 0 1 7 0M15 10h3M15 14h3"/>',
+  wallet: '<path d="M20 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-4a2 2 0 0 0 0 4h4v3a1 1 0 0 1-1 1H5a2 2 0 0 1-2-2V5"/>',
+  tooth: '<path d="M12 5.5C10.5 4 8.5 3 6.5 3.5 3.8 4.2 3 7 3.6 9.8c.5 2.1 1.3 3.6 1.7 5.8.4 2.3.7 5.4 2.4 5.4 1.6 0 1.6-2.8 2.2-4.8.4-1.2 1-1.7 2.1-1.7s1.7.5 2.1 1.7c.6 2 .6 4.8 2.2 4.8 1.7 0 2-3.1 2.4-5.4.4-2.2 1.2-3.7 1.7-5.8C21 7 20.2 4.2 17.5 3.5c-2-.5-4 .5-5.5 2z"/>',
+  file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/>',
+  printer: '<path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/>',
+  edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+  heart: '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8z"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
+  cake: '<path d="M20 21v-8a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8M4 16s.5-1 2-1 2.5 2 4 2 2.5-2 4-2 2.5 2 4 2 2-1 2-1M2 21h20M7 8v3M12 8v3M17 8v3M7 4h.01M12 4h.01M17 4h.01"/>',
+  clipboard: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 12h6M9 16h4"/>',
+  arrowUp: '<path d="M7 17 17 7M8 7h9v9"/>',
+  arrowDown: '<path d="M17 7 7 17M16 17H7V8"/>',
 };
 function icon(name) { return `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] || ''}</svg>`; }
 
@@ -47,16 +59,24 @@ const STATUS = {
 const WSTATUS = { espera: ['Na espera', '', 'clock'], oferta: ['Oferta enviada', 'warn', 'send'], encaixado: ['Encaixado', 'ok', 'check'] };
 const MSG_STATUS = { simulado: 'simulado', enviado: '✓', entregue: '✓✓', lido: '✓✓ lido', erro: 'não enviada', recebido: '' };
 const WEEKDAYS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
-const NAV = [
+// [id, nome no menu, nome curto (celular), ícone, só com as telas de gestão ligadas]
+const ALL_NAV = [
   ['painel', 'Agenda', 'Agenda', 'calendar'],
+  ['pacientes', 'Pacientes', 'Pacientes', 'id', true],
+  ['financeiro', 'Financeiro', 'Financeiro', 'wallet', true],
   ['espera', 'Lista de espera', 'Espera', 'users'],
   ['atividade', 'Atividade', 'Atividade', 'activity'],
   ['config', 'Configurações', 'Ajustes', 'sliders'],
 ];
+/** Telas de gestão (pacientes, orçamentos, financeiro): por enquanto só aparecem onde estiverem ligadas (a demonstração já vem com elas). */
+function modulesOn() { return Boolean(clinic()?.settings?.modules_beta); }
+function navItems() { return ALL_NAV.filter((n) => !n[4] || modulesOn()); }
+// No celular cabem 5 abas: com a gestão ligada, "Atividade" fica no botão do topo da agenda.
+function tabItems() { return navItems().filter(([id]) => !(modulesOn() && id === 'atividade')); }
 const NEEDS_ACTION = ['ligar', 'remarcar', 'vago', 'sem_telefone'];
 
 const state = {
-  demo: false, clinics: [], clinicId: null, view: 'painel', date: null, weekStart: null, data: null, sel: null, mode: 'patient', status: null, timer: null,
+  demo: false, clinics: [], clinicId: null, view: 'painel', sub: [], date: null, weekStart: null, data: null, sel: null, mode: 'patient', status: null, timer: null,
 };
 const $ = (sel, root = document) => root.querySelector(sel);
 const app = $('#app');
@@ -114,10 +134,13 @@ function toast(text, bad = false) {
 
 async function api(path, opts = {}) {
   if (!navigator.onLine) throw new Error('Sem internet. Confira a conexão.');
+  const method = opts.method || 'GET';
+  // O servidor só aceita alterações (POST, PUT, DELETE) enviadas como JSON pelo próprio portal.
+  const body = opts.body ?? (method === 'GET' ? undefined : {});
   const res = await fetch(path, {
-    method: opts.method || 'GET',
-    headers: opts.body !== undefined ? { 'content-type': 'application/json' } : {},
-    body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+    method,
+    headers: body !== undefined ? { 'content-type': 'application/json' } : {},
+    body: body !== undefined ? JSON.stringify(body) : undefined,
     credentials: 'same-origin',
   });
   const data = await res.json().catch(() => ({}));
@@ -195,9 +218,10 @@ async function loadClinics(selectId) {
 
 function renderChrome() {
   const attention = state.data?.attention?.length || 0;
-  $('#side-nav').innerHTML = NAV.map(([id, label, , ic]) => `
+  $('#side-nav').innerHTML = navItems().map(([id, label, , ic]) => `
     <a class="side-link${state.view === id ? ' active' : ''}" href="#${id}">${icon(ic)}<span>${label}</span>${id === 'painel' && attention ? `<span class="count">${attention}</span>` : ''}</a>`).join('');
-  $('#tabbar').innerHTML = NAV.map(([id, , short, ic]) => `
+  $('#tabbar').style.gridTemplateColumns = `repeat(${tabItems().length}, minmax(0, 1fr))`;
+  $('#tabbar').innerHTML = tabItems().map(([id, , short, ic]) => `
     <a class="tab${state.view === id ? ' active' : ''}" href="#${id}">${icon(ic)}<span>${short}</span>${id === 'painel' && attention ? '<span class="dot"></span>' : ''}</a>`).join('');
   $('#logout').innerHTML = `${icon('logout')}<span>${state.demo ? 'Sair da demonstração' : 'Sair'}</span>`;
   renderThemeButtons();
@@ -211,18 +235,26 @@ function renderChrome() {
 }
 
 function route() {
-  const view = location.hash.replace('#', '');
-  state.view = NAV.some(([id]) => id === view) ? view : 'painel';
+  const [view, ...sub] = location.hash.replace('#', '').split('/');
   closeDrawer();
+  state.view = navItems().some(([id]) => id === view) ? view : 'painel';
+  state.sub = state.view === view ? sub : [];
   if (!state.clinicId) { renderChrome(); return showNewClinic(true); }
   try { localStorage.setItem('clinicId', String(state.clinicId)); } catch { /* sem armazenamento */ }
   renderChrome();
   window.scrollTo(0, 0);
   if (state.view === 'config') showConfig();
+  else if (state.view === 'pacientes') showPacientes(state.sub);
+  else if (state.view === 'financeiro') showFinanceiro();
   else if (state.view === 'espera') showEspera();
   else if (state.view === 'atividade') showAtividade();
   else showPainel();
-  if (state.demo) app.insertAdjacentHTML('afterbegin', demoBar());
+  markDemo();
+}
+
+/** Faixa "Demonstração com dados fictícios" no topo (as telas que carregam depois também chamam). */
+function markDemo() {
+  if (state.demo && !app.querySelector('.demo-bar')) app.insertAdjacentHTML('afterbegin', demoBar());
 }
 
 function demoBar() {
@@ -281,7 +313,7 @@ async function loadDay(date) {
 }
 
 async function refresh() {
-  if (!state.date || state.view === 'config') return;
+  if (!state.date || ['config', 'pacientes', 'financeiro'].includes(state.view)) return;
   const data = await api(`/api/clinics/${state.clinicId}/day?date=${state.date}&from=${state.weekStart}`).catch(() => null);
   if (!data) return;
   state.data = data;
@@ -307,6 +339,7 @@ function showPainel() {
     <div class="page-head">
       <div><p class="eyebrow" id="greet"></p><h1 id="day-title">Agenda</h1></div>
       <div class="actions">
+        ${modulesOn() ? `<a class="btn icon show-mobile" href="#atividade" aria-label="Atividade" title="Atividade">${icon('activity')}</a>` : ''}
         <button class="btn hide-mobile" type="button" id="btn-new">${icon('plus')}Nova consulta</button>
         <button class="btn icon" type="button" id="btn-run" title="Ler a agenda e atualizar agora" aria-label="Atualizar agora">${icon('refresh')}</button>
         <button class="btn primary" type="button" id="btn-force">${icon('send')}Enviar confirmações</button>
@@ -476,9 +509,10 @@ function newDialogHtml() {
   return `<dialog id="new-dialog">
     <form id="new-form" method="dialog">
       <div class="full"><h2>Nova consulta</h2><p class="hint" id="n-hint"></p></div>
-      <label class="field full">Paciente<input id="n-patient" required placeholder="Nome completo"></label>
+      <label class="field full">Paciente<input id="n-patient" required placeholder="Nome completo" list="n-patients" autocomplete="off"></label>
+      <datalist id="n-patients"></datalist><datalist id="n-procs"></datalist>
       <label class="field">WhatsApp do paciente<input id="n-phone" inputmode="tel" placeholder="(11) 98765-4321"></label>
-      <label class="field">Procedimento<input id="n-proc" placeholder="Limpeza"></label>
+      <label class="field">Procedimento<input id="n-proc" placeholder="Limpeza" list="n-procs" autocomplete="off"></label>
       <label class="field">Data<input type="date" id="n-date" required></label>
       <label class="field">Horário<input type="time" id="n-time" required step="300"></label>
       <label class="field">Duração (min)<input type="number" id="n-dur" value="60" min="15" step="15"></label>
@@ -490,6 +524,15 @@ function newDialogHtml() {
 
 function bindNewDialog() {
   $('#n-cancel').addEventListener('click', () => $('#new-dialog').close());
+  // Escolheu um paciente cadastrado ou um procedimento da tabela: completa telefone e valor.
+  $('#n-patient').addEventListener('change', () => {
+    const p = (state.patients || []).find((x) => x.name === $('#n-patient').value);
+    if (p?.phone && !$('#n-phone').value) $('#n-phone').value = fmtPhone(p.phone);
+  });
+  $('#n-proc').addEventListener('change', () => {
+    const pr = procedureList().find((x) => x.name === $('#n-proc').value);
+    if (pr?.value != null && !$('#n-value').value) $('#n-value').value = Math.round(pr.value / 100);
+  });
   $('#new-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const body = {
@@ -500,20 +543,26 @@ function bindNewDialog() {
     if (!r) return;
     $('#new-dialog').close();
     state.weekStart = null;
+    if (state.view === 'pacientes') { state.date = body.date; return reloadPatient(); }
     await loadDay(body.date);
   });
 }
 
-function openNewDialog() {
+function openNewDialog(prefill = {}) {
   $('#new-form').reset();
-  $('#n-date').value = state.date;
+  $('#n-date').value = state.date || shiftDate(todayKey(), 1);
+  if (prefill.name) $('#n-patient').value = prefill.name;
+  if (prefill.phone) $('#n-phone').value = fmtPhone(prefill.phone);
+  $('#n-procs').innerHTML = procedureList().map((p) => `<option value="${esc(p.name)}">`).join('');
+  $('#n-patients').innerHTML = (state.patients || []).map((p) => `<option value="${esc(p.name)}">${esc(fmtPhone(p.phone))}</option>`).join('');
+  if (modulesOn() && !state.patients) loadPatientsList().then(() => { $('#n-patients').innerHTML = (state.patients || []).map((p) => `<option value="${esc(p.name)}">${esc(fmtPhone(p.phone))}</option>`).join(''); });
   $('#n-dur').value = 60;
   const c = clinic();
   $('#n-hint').textContent = c.calendar_id && state.status?.google.configured
     ? 'Ela também será criada no Google Agenda da clínica.'
     : 'Sem Google Agenda conectado, a consulta fica só no portal.';
   $('#new-dialog').showModal();
-  $('#n-patient').focus();
+  (prefill.name ? $('#n-proc') : $('#n-patient')).focus();
 }
 
 // ---------- Lista de espera ----------
@@ -649,6 +698,7 @@ async function refreshDrawer() {
     actions.innerHTML = `<button class="btn small danger" type="button" id="remove-wait">${icon('trash')}Tirar da lista</button>`;
     $('#remove-wait').addEventListener('click', () => removeWait(wait.id));
   }
+  if (modulesOn() && !free && name) drawerPatientLink(actions, name, sel.phone);
 
   const chat = $('#chat');
   if (!sel.phone) {
@@ -770,7 +820,14 @@ function showConfig() {
         <div class="grid2">
           ${field('c-name', 'Nome', c.name, 'required')}
           ${field('c-address', 'Endereço', c.address, 'placeholder="Rua das Acácias, 120, sala 4"')}
+          ${field('s-dentist', 'Dentista responsável (sai nos documentos)', s.dentist_name, 'placeholder="Dra. Helena Prado"')}
+          ${field('s-cro', 'CRO', s.dentist_cro, 'placeholder="CRO-SP 12345"')}
         </div>`)}
+
+      ${section('Pacientes, orçamentos e financeiro', 'Ficha completa do paciente (cadastro, anamnese, odontograma, evoluções), orçamentos, financeiro e documentos para imprimir.', `
+        ${check('s-modules', 'Mostrar estas telas no portal (novidade em teste)', s.modules_beta)}
+        <label class="field">Tabela de procedimentos (um por linha: nome = valor)<textarea id="s-procedures" rows="6" placeholder="Limpeza = 180">${esc(s.procedures)}</textarea></label>
+        <p class="hint">Aparece como sugestão no orçamento e na nova consulta, já com o valor.</p>`)}
 
       ${state.demo ? section('WhatsApp e Google Agenda', '', `
         <div class="status-row">${chip(['Modo teste', 'info', 'clock'])}<p>Na demonstração as mensagens são só simuladas. Na versão da sua clínica, o sistema envia pelo WhatsApp oficial da clínica e lê as consultas direto do Google Agenda.</p></div>`) : ''}
@@ -888,6 +945,7 @@ async function saveConfig(e, keepScreen = false) {
     name: v('c-name'), address: v('c-address'), calendar_id: v('c-calendar'), wa_phone_number_id: v('c-wa'),
     wa_token: v('c-wa-token'), wa_app_secret: v('c-wa-secret'),
     settings: {
+      modules_beta: ch('s-modules'), dentist_name: v('s-dentist').trim(), dentist_cro: v('s-cro').trim(), procedures: v('s-procedures'),
       test_mode: ch('s-test'), wa_business_account_id: v('s-waba').replace(/\D/g, ''), confirm_days_before: n('s-days'), confirm_time: v('s-confirm'),
       second_reminder: ch('s-second'), second_time: v('s-second-time'), escalate_time: v('s-escalate'),
       final_reminder: ch('s-final'), final_hours: n('s-final-hours'), send_from: v('s-from'), send_until: v('s-until'),
@@ -907,6 +965,7 @@ async function saveConfig(e, keepScreen = false) {
   const saved = await act(() => api(`/api/clinics/${state.clinicId}`, { method: 'PUT', body }), 'Configurações salvas.');
   if (!saved) return null;
   await loadClinics(state.clinicId);
+  state.patients = null;
   renderChrome();
   if (keepScreen) {
     $('#c-wa-token').value = '';
@@ -943,6 +1002,7 @@ document.addEventListener('click', (e) => {
   const day = e.target.closest('[data-date]');
   if (day) return loadDay(day.dataset.date);
   if (e.target.closest('[data-new]')) return openNewDialog();
+  if (gestaoClick(e)) return;
   const row = e.target.closest('[data-appt]');
   if (row) {
     const a = findAppt(Number(row.dataset.appt));
@@ -968,6 +1028,7 @@ for (const sel of [$('#clinic-select'), $('#clinic-select-m')]) {
     if (e.target.value === 'new') { closeDrawer(); renderChrome(); return showNewClinic(false); }
     state.clinicId = Number(e.target.value);
     state.data = null;
+    state.patients = null;
     state.date = null;
     state.weekStart = null;
     syncSelects();

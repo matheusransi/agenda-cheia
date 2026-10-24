@@ -6,6 +6,7 @@ import {
 import { createEvent, listEvents, moveEvent, serviceAccount } from './google';
 import { isSimulated, recordInbound, send, windowOpen } from './messaging';
 import { classifyText, fillTemplate, firstName, fmtPhone, normalizePhone, parseEvent, phoneKey } from './parse';
+import { ensurePatient } from './records';
 import { findFreeSlots, type Interval } from './slots';
 import {
   HOUR, MINUTE, addDays, atLocalTime, fmtLongDate, fmtSlot, fmtTime, hhmmToMinutes, localDateKey, minutesOfDay,
@@ -165,6 +166,7 @@ export async function syncCalendar(env: Env, clinic: Clinic, now: Date): Promise
           status: p.phone ? 'agendado' : 'sem_telefone',
         });
         created++;
+        await ensurePatient(env, clinic.id, p.patient, p.phone).catch((e) => console.error('Falha ao criar ficha', e));
       } catch {
         // Outra execução inseriu o mesmo evento ao mesmo tempo.
       }
