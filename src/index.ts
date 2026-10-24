@@ -1,10 +1,11 @@
 // Ponto de entrada do Worker: API do portal, webhook do WhatsApp e ciclo agendado.
 import { Hono, type Context } from 'hono';
-import { checkPassword, clearSession, createSession, isLoggedIn } from './auth';
+import { checkPassword, clearDemoSession, clearSession, createDemoSession, createSession, demoClinicId, isLoggedIn } from './auth';
 import {
   type Appointment, type Clinic, type ClinicRow, type Env, type Message, type WaitEntry,
   getAppointment, getClinic, listClinics, logEvent, publicClinic, toClinic,
 } from './db';
+import { DEMO_TTL_HOURS, cleanupDemos, createDemoClinic } from './demo';
 import { cancelAppointment, createAppointment, handleInbound, isSimulated, runCycle } from './engine';
 import { serviceAccount } from './google';
 import { send, windowOpen } from './messaging';
@@ -13,7 +14,8 @@ import { DEFAULT_SETTINGS, mergeSettings } from './settings';
 import { HOUR, addDays, dayRange, localDateKey } from './time';
 import { checkConnection, parseWebhook, verifySignature, verifyToken, whatsappToken } from './whatsapp';
 
-type App = { Bindings: Env; Variables: { clinic: Clinic } };
+// `demo`: ID da clínica de demonstração do visitante (link /demo), ou null para quem entrou com a senha.
+type App = { Bindings: Env; Variables: { clinic: Clinic; demo: number | null } };
 const app = new Hono<App>();
 
 const fail = (c: Context, status: 400 | 401 | 403 | 404 | 409 | 500, error: string) => c.json({ error }, status);
@@ -38,19 +40,46 @@ app.post('/api/login', async (c) => {
 
 app.post('/api/logout', (c) => {
   c.header('set-cookie', clearSession());
+  c.header('set-cookie', clearDemoSession(), { append: true });
   return c.json({ ok: true });
 });
 
+// ---------- Demonstração ----------
+
+// Link para mostrar o sistema a clínicas interessadas: abre sem senha, com uma clínica fictícia só deste visitante.
+// "/demo?novo" recomeça do zero.
+app.get('/demo', async (c) => {
+  if (!c.env.ADMIN_PASSWORD) return c.text('A demonstração precisa da senha do portal (ADMIN_PASSWORD) configurada.', 503);
+  const fresh = c.req.query('novo') !== undefined;
+  const current = fresh ? null : await demoClinicId(c.env, c.req.header('cookie') ?? null);
+  if (current && (await getClinic(c.env, current))?.demo) return c.redirect('/', 302);
+  try {
+    const id = await createDemoClinic(c.env);
+    c.header('set-cookie', await createDemoSession(c.env, id, DEMO_TTL_HOURS * 3600));
+    return c.redirect('/', 302);
+  } catch (e) {
+    return c.text(e instanceof Error ? e.message : 'Não foi possível abrir a demonstração.', 503);
+  }
+});
+
 app.use('/api/*', async (c, next) => {
-  if (!(await isLoggedIn(c.env, c.req.header('cookie') ?? null))) return fail(c, 401, 'Faça login para continuar.');
+  const cookie = c.req.header('cookie') ?? null;
+  // Quem abriu o link de demonstração só enxerga a própria clínica fictícia, mesmo que também tenha a senha.
+  const demo = await demoClinicId(c.env, cookie);
+  if (demo === null && !(await isLoggedIn(c.env, cookie))) return fail(c, 401, 'Faça login para continuar.');
+  c.set('demo', demo);
   // Pedidos que alteram dados precisam vir do próprio portal.
   if (c.req.method !== 'GET' && !c.req.header('content-type')?.includes('application/json')) return fail(c, 400, 'Pedido inválido.');
   await next();
 });
 
-app.get('/api/me', (c) => c.json({ ok: true }));
+app.get('/api/me', (c) => c.json({ ok: true, demo: c.get('demo') !== null }));
 
 app.get('/api/status', (c) => {
+  // A demonstração não mostra dados da instalação real (e-mail do Google, token do webhook).
+  if (c.get('demo') !== null) {
+    return c.json({ google: { configured: false, email: null }, whatsapp: { env_token: false, env_app_secret: false, verify_token: '' }, webhook_url: '' });
+  }
   const sa = serviceAccount(c.env);
   return c.json({
     google: { configured: Boolean(sa), email: sa?.client_email ?? null },
@@ -61,9 +90,17 @@ app.get('/api/status', (c) => {
 
 // ---------- Clínicas ----------
 
-app.get('/api/clinics', async (c) => c.json((await listClinics(c.env)).map(publicClinic)));
+app.get('/api/clinics', async (c) => {
+  const demo = c.get('demo');
+  if (demo !== null) {
+    const clinic = await getClinic(c.env, demo);
+    return c.json(clinic ? [publicClinic(clinic)] : []);
+  }
+  return c.json((await listClinics(c.env)).map(publicClinic));
+});
 
 app.post('/api/clinics', async (c) => {
+  if (c.get('demo') !== null) return fail(c, 403, 'Na demonstração não dá para cadastrar outra clínica.');
   const body = await c.req.json<{ name?: string }>();
   const name = (body.name ?? '').trim();
   if (!name) return fail(c, 400, 'Informe o nome da clínica.');
@@ -74,13 +111,13 @@ app.post('/api/clinics', async (c) => {
 
 app.use('/api/clinics/:id/*', async (c, next) => {
   const clinic = await getClinic(c.env, Number(c.req.param('id')));
-  if (!clinic) return fail(c, 404, 'Clínica não encontrada.');
+  if (!clinic || (c.get('demo') !== null && clinic.id !== c.get('demo'))) return fail(c, 404, 'Clínica não encontrada.');
   c.set('clinic', clinic);
   await next();
 });
 app.use('/api/clinics/:id', async (c, next) => {
   const clinic = await getClinic(c.env, Number(c.req.param('id')));
-  if (!clinic) return fail(c, 404, 'Clínica não encontrada.');
+  if (!clinic || (c.get('demo') !== null && clinic.id !== c.get('demo'))) return fail(c, 404, 'Clínica não encontrada.');
   c.set('clinic', clinic);
   await next();
 });
@@ -90,6 +127,11 @@ app.get('/api/clinics/:id', (c) => c.json(publicClinic(c.get('clinic'))));
 app.put('/api/clinics/:id', async (c) => {
   const clinic = c.get('clinic');
   const body = await c.req.json<Partial<Clinic> & { wa_token?: string; wa_app_secret?: string }>();
+  if (clinic.demo) {
+    // Na demonstração, o WhatsApp e o Google Agenda ficam sempre desligados.
+    delete body.wa_token; delete body.wa_app_secret; delete body.wa_phone_number_id; delete body.calendar_id;
+    body.settings = { ...(body.settings ?? {}), test_mode: true, wa_business_account_id: '' } as Clinic['settings'];
+  }
   const settings = mergeSettings(clinic.settings as unknown as Record<string, unknown>, body.settings ?? {});
   const str = (v: unknown, fallback: string) => (typeof v === 'string' ? v.trim() : fallback);
   const name = str(body.name, clinic.name);
@@ -179,6 +221,7 @@ app.post('/api/clinics/:id/send', async (c) => {
 
 app.post('/api/clinics/:id/whatsapp-check', async (c) => {
   const clinic = c.get('clinic');
+  if (clinic.demo) return fail(c, 409, 'Na demonstração o WhatsApp fica desligado: as mensagens são só simuladas.');
   const steps = await checkConnection(whatsappToken(c.env, clinic), clinic.wa_phone_number_id, clinic.settings.wa_business_account_id.replace(/\D/g, ''));
   const failed = steps.find((s) => !s.ok);
   await logEvent(c.env, clinic.id, failed ? `Verificação do WhatsApp: ${failed.text}` : 'Verificação do WhatsApp concluída: tudo certo.', failed ? 'bad' : 'ok');
@@ -325,7 +368,9 @@ export default {
   fetch: app.fetch,
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil((async () => {
-      for (const clinic of await listClinics(env)) {
+      await cleanupDemos(env).catch((e) => console.error('Limpeza das demonstrações falhou', e));
+      // As clínicas de demonstração também rodam o ciclo (em modo teste), para a demonstração parecer viva.
+      for (const clinic of await listClinics(env, true)) {
         try {
           await runCycle(env, clinic);
         } catch (e) {

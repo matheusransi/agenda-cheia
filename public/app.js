@@ -56,7 +56,7 @@ const NAV = [
 const NEEDS_ACTION = ['ligar', 'remarcar', 'vago', 'sem_telefone'];
 
 const state = {
-  clinics: [], clinicId: null, view: 'painel', date: null, weekStart: null, data: null, sel: null, mode: 'patient', status: null, timer: null,
+  demo: false, clinics: [], clinicId: null, view: 'painel', date: null, weekStart: null, data: null, sel: null, mode: 'patient', status: null, timer: null,
 };
 const $ = (sel, root = document) => root.querySelector(sel);
 const app = $('#app');
@@ -121,6 +121,7 @@ async function api(path, opts = {}) {
     credentials: 'same-origin',
   });
   const data = await res.json().catch(() => ({}));
+  if (res.status === 401 && state.demo) { location.href = '/demo'; throw new Error('A demonstração expirou. Abrindo outra...'); }
   if (res.status === 401 && path !== '/api/login') { showLogin(); throw new Error(data.error || 'Faça login.'); }
   if (!res.ok) throw new Error(data.error || `Erro ${res.status}`);
   return data;
@@ -171,7 +172,7 @@ function showLogin() {
 }
 
 async function start() {
-  try { await api('/api/me'); } catch { return; }
+  try { state.demo = Boolean((await api('/api/me')).demo); } catch { return; }
   $('#auth').hidden = true;
   $('#shell').hidden = false;
   state.status = await api('/api/status').catch(() => null);
@@ -185,7 +186,7 @@ async function loadClinics(selectId) {
   try { saved = Number(localStorage.getItem('clinicId')); } catch { /* sem armazenamento */ }
   const wanted = selectId ?? state.clinicId ?? saved;
   state.clinicId = state.clinics.some((c) => c.id === wanted) ? wanted : state.clinics[0]?.id ?? null;
-  const options = state.clinics.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('') + '<option value="new">+ Nova clínica</option>';
+  const options = state.clinics.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('') + (state.demo ? '' : '<option value="new">+ Nova clínica</option>');
   for (const sel of [$('#clinic-select'), $('#clinic-select-m')]) {
     sel.innerHTML = options;
     if (state.clinicId) sel.value = String(state.clinicId);
@@ -198,7 +199,7 @@ function renderChrome() {
     <a class="side-link${state.view === id ? ' active' : ''}" href="#${id}">${icon(ic)}<span>${label}</span>${id === 'painel' && attention ? `<span class="count">${attention}</span>` : ''}</a>`).join('');
   $('#tabbar').innerHTML = NAV.map(([id, , short, ic]) => `
     <a class="tab${state.view === id ? ' active' : ''}" href="#${id}">${icon(ic)}<span>${short}</span>${id === 'painel' && attention ? '<span class="dot"></span>' : ''}</a>`).join('');
-  $('#logout').innerHTML = `${icon('logout')}<span>Sair</span>`;
+  $('#logout').innerHTML = `${icon('logout')}<span>${state.demo ? 'Sair da demonstração' : 'Sair'}</span>`;
   renderThemeButtons();
   const sim = isSimulated();
   for (const el of [$('#mode-pill'), $('#mode-pill-m')]) {
@@ -217,10 +218,19 @@ function route() {
   try { localStorage.setItem('clinicId', String(state.clinicId)); } catch { /* sem armazenamento */ }
   renderChrome();
   window.scrollTo(0, 0);
-  if (state.view === 'config') return showConfig();
-  if (state.view === 'espera') return showEspera();
-  if (state.view === 'atividade') return showAtividade();
-  return showPainel();
+  if (state.view === 'config') showConfig();
+  else if (state.view === 'espera') showEspera();
+  else if (state.view === 'atividade') showAtividade();
+  else showPainel();
+  if (state.demo) app.insertAdjacentHTML('afterbegin', demoBar());
+}
+
+function demoBar() {
+  return `<div class="demo-bar" role="note">
+    <span class="demo-ic">${icon('spark')}</span>
+    <p><strong>Demonstração com dados fictícios.</strong> Nenhuma mensagem sai pelo WhatsApp. Toque num paciente para ver a conversa e responder como se fosse ele.</p>
+    <a class="btn small" href="/demo?novo">${icon('refresh')}Recomeçar</a>
+  </div>`;
 }
 
 function showNewClinic(first) {
@@ -762,7 +772,9 @@ function showConfig() {
           ${field('c-address', 'Endereço', c.address, 'placeholder="Rua das Acácias, 120, sala 4"')}
         </div>`)}
 
-      ${section('WhatsApp', '', `
+      ${state.demo ? section('WhatsApp e Google Agenda', '', `
+        <div class="status-row">${chip(['Modo teste', 'info', 'clock'])}<p>Na demonstração as mensagens são só simuladas. Na versão da sua clínica, o sistema envia pelo WhatsApp oficial da clínica e lê as consultas direto do Google Agenda.</p></div>`) : ''}
+      ${state.demo ? '' : section('WhatsApp', '', `
         <div class="status-row">${chip(waStatus)}<p>${waHint}</p></div>
         <p class="hint">Na Meta: <strong>developers.facebook.com → seu app → WhatsApp → Configuração da API</strong>. A chave secreta fica em <strong>Configurações do app → Básico</strong>.</p>
         <div class="grid2">
@@ -778,7 +790,7 @@ function showConfig() {
         <div class="actions"><button type="button" class="btn" id="wa-check">${icon('check')}Salvar, verificar e ligar o WhatsApp</button></div>
         <ul class="status-list" id="wa-check-result"></ul>`)}
 
-      ${section('Google Agenda', st.google.configured
+      ${state.demo ? '' : section('Google Agenda', st.google.configured
         ? `Compartilhe a agenda da clínica com <code>${esc(st.google.email)}</code> marcando “Fazer alterações nos eventos”.`
         : 'Sem a conta de serviço do Google, as consultas são cadastradas pelo portal (“Nova consulta”).', `
         ${field('c-calendar', 'ID do Google Agenda', c.calendar_id, 'placeholder="xxxx@group.calendar.google.com"')}
@@ -840,7 +852,7 @@ function showConfig() {
 
       <div class="save-bar"><span class="hint" id="save-state"></span><button class="btn primary" type="submit">${icon('check')}Salvar configurações</button></div>
     </form>
-    <div><button class="btn ghost danger" type="button" id="logout-config">${icon('logout')}Sair da conta</button></div>`;
+    <div><button class="btn ghost danger" type="button" id="logout-config">${icon('logout')}${state.demo ? 'Sair da demonstração' : 'Sair da conta'}</button></div>`;
 
   $('#config-form').addEventListener('input', () => { $('#save-state').textContent = 'Alterações não salvas'; });
   $('#config-form').addEventListener('click', async (e) => {
@@ -849,7 +861,7 @@ function showConfig() {
     try { await navigator.clipboard.writeText(b.dataset.copy); toast('Copiado.'); } catch { toast('Não deu para copiar. Selecione o texto e copie.', true); }
   });
   $('#config-form').addEventListener('submit', saveConfig);
-  $('#wa-check').addEventListener('click', checkWhatsApp);
+  $('#wa-check')?.addEventListener('click', checkWhatsApp);
   $('#logout-config').addEventListener('click', logout);
 }
 
@@ -866,9 +878,10 @@ async function checkWhatsApp() {
 
 async function saveConfig(e, keepScreen = false) {
   if (e) e.preventDefault();
-  const v = (id) => $('#' + id).value;
+  // Na demonstração os campos do WhatsApp e do Google não aparecem (o servidor ignora esses valores).
+  const v = (id) => $('#' + id)?.value ?? '';
   const n = (id) => Number($('#' + id).value);
-  const ch = (id) => $('#' + id).checked;
+  const ch = (id) => $('#' + id)?.checked ?? true;
   const work = {};
   for (const d of [0, 1, 2, 3, 4, 5, 6]) work[d] = v('wh-' + d).trim();
   const body = {
@@ -902,6 +915,7 @@ async function saveConfig(e, keepScreen = false) {
     return saved;
   }
   showConfig();
+  if (state.demo) app.insertAdjacentHTML('afterbegin', demoBar());
   $('#save-state').textContent = 'Salvo';
   return saved;
 }
@@ -961,6 +975,7 @@ for (const sel of [$('#clinic-select'), $('#clinic-select-m')]) {
   });
 }
 async function logout() {
+  state.demo = false;
   await api('/api/logout', { method: 'POST', body: {} }).catch(() => null);
   showLogin();
 }

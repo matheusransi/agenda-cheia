@@ -23,6 +23,8 @@ export type ClinicRow = {
   wa_token: string;
   wa_app_secret: string;
   settings: string;
+  /** 1 = clínica de demonstração (link /demo): dados fictícios, nunca envia WhatsApp de verdade. */
+  demo: number;
   created_at: string;
 };
 
@@ -107,8 +109,9 @@ export async function getClinic(env: Env, id: number): Promise<Clinic | null> {
   return row ? toClinic(row) : null;
 }
 
-export async function listClinics(env: Env): Promise<Clinic[]> {
-  const { results } = await env.DB.prepare('SELECT * FROM clinics ORDER BY name').all<ClinicRow>();
+/** Clínicas reais (sem as de demonstração), ou todas com `withDemo` (usado pelo ciclo automático). */
+export async function listClinics(env: Env, withDemo = false): Promise<Clinic[]> {
+  const { results } = await env.DB.prepare(`SELECT * FROM clinics${withDemo ? '' : ' WHERE demo = 0'} ORDER BY name`).all<ClinicRow>();
   return results.map(toClinic);
 }
 

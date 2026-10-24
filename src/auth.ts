@@ -1,7 +1,9 @@
 // Login do portal: uma senha (ADMIN_PASSWORD) e um cookie assinado válido por 7 dias.
+// Visitantes do link /demo recebem outro cookie, que só dá acesso à clínica de demonstração deles.
 import type { Env } from './db';
 
 export const COOKIE = 'ac_session';
+export const DEMO_COOKIE = 'ac_demo';
 const MAX_AGE = 7 * 24 * 3600;
 
 async function hmacHex(secret: string, data: string): Promise<string> {
@@ -34,11 +36,35 @@ export function clearSession(): string {
   return `${COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
 }
 
+function readCookie(cookieHeader: string | null, name: string): string | null {
+  const match = (cookieHeader ?? '').split(/;\s*/).find((c) => c.startsWith(`${name}=`));
+  return match ? match.slice(name.length + 1) : null;
+}
+
+/** Cookie da demonstração: "<id da clínica>.<expira>.<assinatura>". */
+export async function createDemoSession(env: Env, clinicId: number, maxAge: number): Promise<string> {
+  const payload = `${clinicId}.${Math.floor(Date.now() / 1000) + maxAge}`;
+  const sig = await hmacHex(`demo:${env.ADMIN_PASSWORD}`, payload);
+  return `${DEMO_COOKIE}=${payload}.${sig}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
+}
+
+export function clearDemoSession(): string {
+  return `${DEMO_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
+}
+
+/** ID da clínica de demonstração deste visitante, ou null. */
+export async function demoClinicId(env: Env, cookieHeader: string | null): Promise<number | null> {
+  const value = readCookie(cookieHeader, DEMO_COOKIE);
+  if (!env.ADMIN_PASSWORD || !value) return null;
+  const [id, exp, sig] = value.split('.');
+  if (!id || !exp || !sig || Number(exp) < Date.now() / 1000) return null;
+  return equal(sig, await hmacHex(`demo:${env.ADMIN_PASSWORD}`, `${id}.${exp}`)) ? Number(id) : null;
+}
+
 export async function isLoggedIn(env: Env, cookieHeader: string | null): Promise<boolean> {
-  if (!env.ADMIN_PASSWORD || !cookieHeader) return false;
-  const match = cookieHeader.split(/;\s*/).find((c) => c.startsWith(`${COOKIE}=`));
-  if (!match) return false;
-  const [exp, sig] = match.slice(COOKIE.length + 1).split('.');
+  const value = readCookie(cookieHeader, COOKIE);
+  if (!env.ADMIN_PASSWORD || !value) return false;
+  const [exp, sig] = value.split('.');
   if (!exp || !sig || Number(exp) < Date.now() / 1000) return false;
   return equal(sig, await hmacHex(`session:${env.ADMIN_PASSWORD}`, exp));
 }
