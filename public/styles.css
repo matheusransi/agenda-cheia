@@ -388,3 +388,18 @@ label.check input { width: 18px; height: 18px; accent-color: var(--accent); flex
 }
 .toast.bad { background: var(--bad); color: #fff; }
 @media (max-width: 900px) { .toast { bottom: calc(84px + env(safe-area-inset-bottom, 0px)); } }
+
+/* ---------- Faixa da demonstração ---------- */
+.demo-bar {
+  display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: var(--radius);
+  background: var(--accent-soft); color: var(--ink); border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+}
+.demo-bar p { font-size: 14px; color: var(--ink-2); flex: 1; min-width: 0; }
+.demo-bar p strong { color: var(--ink); }
+.demo-ic { width: 34px; height: 34px; border-radius: 10px; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; flex: none; }
+.demo-bar .btn { flex: none; text-decoration: none; }
+@media (max-width: 560px) {
+  .demo-bar { flex-wrap: wrap; gap: 8px 10px; padding: 10px 12px; }
+  .demo-ic { display: none; }
+  .demo-bar p { flex-basis: 100%; font-size: 13px; }
+}

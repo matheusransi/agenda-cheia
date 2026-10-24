@@ -70,6 +70,17 @@ Logo depois de publicar, já dá para usar:
 
 No modo teste nenhuma mensagem real sai. Tudo aparece no portal como se tivesse sido enviado.
 
+### 2.1 Link de demonstração (para mostrar a clínicas interessadas)
+
+Envie o endereço do portal com `/demo` no final, por exemplo `https://agenda-cheia.SEU-SUBDOMINIO.workers.dev/demo`.
+
+- Abre **sem senha**, direto numa clínica fictícia (“Clínica Sorriso”) com consultas da semana, confirmações, remarcação, lista de espera e atividade.
+- Cada pessoa que abre o link ganha **a sua própria cópia**: o que um interessado mexe não aparece para outro, e ninguém vê as suas clínicas de verdade.
+- Nenhuma mensagem sai pelo WhatsApp e não dá para ligar o WhatsApp nem o Google Agenda na demonstração.
+- O visitante pode tocar num paciente e responder como se fosse ele, para ver o sistema reagindo.
+- O botão **Recomeçar** (ou o endereço `/demo?novo`) volta tudo ao início. Cada demonstração é apagada sozinha depois de 1 dia.
+- Se você abrir o link no seu próprio celular, o portal passa a mostrar a demonstração. Para voltar à sua conta, toque em **Sair da demonstração** e entre de novo com a senha.
+
 ---
 
 ## 3. Conectar o Google Agenda da clínica

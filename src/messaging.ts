@@ -7,7 +7,7 @@ import { type Outgoing, sendWhatsApp, whatsappToken } from './whatsapp';
 export type SendContext = { appointmentId?: number | null; waitlistId?: number | null };
 
 export function isSimulated(env: Env, clinic: Clinic): boolean {
-  return clinic.settings.test_mode || !whatsappToken(env, clinic) || !clinic.wa_phone_number_id;
+  return Boolean(clinic.demo) || clinic.settings.test_mode || !whatsappToken(env, clinic) || !clinic.wa_phone_number_id;
 }
 
 /** A Meta só permite mensagens livres (sem modelo aprovado) até 24h depois da última mensagem do paciente. */

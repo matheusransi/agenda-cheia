@@ -2,10 +2,10 @@ name = "agenda-cheia"
 main = "src/index.ts"
 compatibility_date = "2026-09-01"
 
-# Portal (HTML/JS/CSS). As rotas /api e /webhook sempre passam pelo Worker.
+# Portal (HTML/JS/CSS). As rotas /api, /webhook e /demo sempre passam pelo Worker.
 [assets]
 directory = "./public"
-run_worker_first = ["/api/*", "/webhook/*"]
+run_worker_first = ["/api/*", "/webhook/*", "/demo"]
 
 # Roda o ciclo de automação a cada 15 minutos (horário UTC; o código converte para o fuso da clínica).
 [triggers]
