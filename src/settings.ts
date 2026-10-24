@@ -16,6 +16,13 @@ export type Settings = {
   offer_minutes: number;
   slot_step: number;
   work_hours: Record<string, string>;
+  /** Mostra no portal as telas de gestão (pacientes, orçamentos, financeiro). Em teste: ligado só na demonstração. */
+  modules_beta: boolean;
+  /** Dentista responsável, impresso nos documentos (atestado, receita, orçamento). */
+  dentist_name: string;
+  dentist_cro: string;
+  /** Tabela de procedimentos, um por linha: "Limpeza = 180". Sugere nome e valor no orçamento e na nova consulta. */
+  procedures: string;
   templates: {
     confirm: { name: string; preview: string };
     offer: { name: string; preview: string };
@@ -60,6 +67,14 @@ export const DEFAULT_SETTINGS: Settings = {
     '5': '08:00-12:00, 13:00-18:00',
     '6': '',
   },
+  modules_beta: false,
+  dentist_name: '',
+  dentist_cro: '',
+  procedures: [
+    'Avaliação = 120', 'Limpeza (profilaxia) = 180', 'Restauração em resina = 250', 'Tratamento de canal = 900',
+    'Extração simples = 350', 'Clareamento = 600', 'Coroa de porcelana = 1500', 'Implante = 2800',
+    'Manutenção do aparelho = 150', 'Raspagem (por arcada) = 300',
+  ].join('\n'),
   templates: {
     confirm: {
       name: 'confirmacao_consulta',
