@@ -607,3 +607,83 @@ dialog .actions { align-items: center; }
 .timeline .when { font-size: 12px; color: var(--muted); font-weight: 700; text-transform: capitalize; }
 .timeline p { font-size: 14.5px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .timeline li.hempty { display: block; border: 0; }
+
+/* ---------- Termos e assinaturas (portal) ---------- */
+.doc-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; margin-top: 14px; }
+.doc-card { display: flex; flex-direction: column; }
+.doc-card .card-head h3 { font-size: 15.5px; line-height: 1.35; }
+.doc-card .eyebrow { margin-bottom: 2px; }
+.doc-card > .hint, .doc-card > .actions { padding: 0 18px; }
+.doc-card > .actions { padding-bottom: 16px; margin-top: auto; padding-top: 10px; flex-wrap: wrap; }
+.doc-steps { list-style: none; margin: 0; padding: 0 18px 8px; display: flex; flex-direction: column; gap: 6px; }
+.doc-steps li { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 8px; align-items: center; font-size: 13.5px; }
+.doc-steps li svg.i { width: 15px; height: 15px; color: var(--ok); }
+.doc-steps small { color: var(--muted); font-size: 12px; }
+.doc-signed { display: flex; align-items: center; gap: 12px; margin: 4px 18px 8px; padding: 8px 12px; border: 1px dashed var(--line); border-radius: 12px; }
+.doc-signed img { width: 140px; height: 56px; object-fit: contain; background: #fff; border-radius: 8px; }
+.doc-signed p { font-size: 13.5px; font-weight: 700; }
+.doc-signed small { font-weight: 500; color: var(--muted); }
+.sign-state { display: flex; align-items: center; gap: 6px; color: var(--accent-strong); font-weight: 600; }
+:root[data-theme="dark"] .sign-state { color: var(--accent); }
+.sign-state svg.i { width: 15px; height: 15px; }
+.link-box { font-size: 13px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+#term-dialog textarea { font-size: 14px; line-height: 1.55; }
+#tm-entry-hint { display: flex; gap: 8px; align-items: flex-start; }
+#tm-entry-hint[hidden] { display: none; }
+
+/* ---------- Fotos e exames ---------- */
+.file-btn { cursor: pointer; }
+.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; margin-top: 14px; }
+.gitem { border: 1px solid var(--line); background: var(--surface); border-radius: 14px; padding: 0; overflow: hidden; text-align: left; display: flex; flex-direction: column; color: inherit; box-shadow: var(--shadow-sm); }
+.gitem:hover { border-color: var(--accent); }
+.gitem img, .gitem .gfile { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: var(--surface-2); display: grid; place-items: center; color: var(--muted); }
+.gfile { display: grid; place-items: center; gap: 2px; font-weight: 800; }
+.gfile svg.i { width: 30px; height: 30px; }
+.gcap { padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.gcap strong { font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gcap small { font-size: 12px; color: var(--muted); }
+.drop { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; padding: 36px 20px; margin-top: 14px; border: 2px dashed var(--line); box-shadow: none; cursor: pointer; color: var(--muted); }
+.drop:hover { border-color: var(--accent); }
+.drop .big { width: 52px; height: 52px; border-radius: 16px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
+.drop strong { color: var(--ink); font-size: 15px; }
+.up-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.up-list li { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 12px; align-items: start; }
+.up-list img, .up-list .gfile { width: 72px; height: 72px; object-fit: cover; border-radius: 10px; background: var(--surface-2); }
+.up-list li > div { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.up-list select, .up-list input { padding: 8px 10px; font-size: 14px; }
+.up-list small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.att-view { display: grid; place-items: center; background: var(--surface-2); border-radius: 14px; min-height: 120px; overflow: hidden; }
+.att-view img { max-width: 100%; max-height: 62vh; display: block; }
+#att-dialog .actions { flex-wrap: wrap; }
+#att-del { margin-right: auto; }
+
+/* ---------- Página do paciente para assinar (/p/...) ---------- */
+.sign-page { min-height: 100vh; }
+.sign-head { display: flex; align-items: center; gap: 12px; padding: 14px 18px; background: var(--surface); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; }
+.sign-head div { display: flex; flex-direction: column; min-width: 0; }
+.sign-head strong { font-size: 16px; }
+.sign-head span:not(.brand-mark) { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sign-main { max-width: 720px; margin: 0 auto; padding: 20px 16px 48px; display: flex; flex-direction: column; gap: 16px; }
+.sign-main .card-body { padding: 0 18px 18px; }
+.sign-main .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.sign-main .grid2 .full { grid-column: 1 / -1; }
+.sign-intro h1 { font-size: 24px; letter-spacing: -0.02em; margin: 2px 0 6px; }
+.sign-text { white-space: pre-wrap; font-size: 15px; line-height: 1.65; max-height: 52vh; overflow-y: auto; padding: 14px; background: var(--surface-2); border-radius: 12px; }
+.sign-pad { position: relative; margin: 14px 0; border: 1.5px dashed var(--line); border-radius: 14px; background: #fff; touch-action: none; }
+.sign-pad canvas { display: block; width: 100%; height: 190px; touch-action: none; cursor: crosshair; }
+.sign-line { position: absolute; left: 18px; right: 18px; bottom: 34px; border-top: 1px solid #c9d6d9; font-size: 11.5px; color: #8a9ca0; padding-top: 4px; pointer-events: none; }
+.sign-pad #pad-clear { position: absolute; top: 8px; right: 8px; }
+.sign-main form .check { margin: 4px 0 10px; }
+.sign-submit { width: 100%; justify-content: center; padding: 14px; font-size: 16px; margin: 6px 0 10px; }
+.sign-done { text-align: center; padding: 36px 22px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.sign-done .big { width: 60px; height: 60px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-2); color: var(--muted); }
+.sign-done .big.ok { background: var(--accent-soft); color: var(--ok); }
+.sign-done .big { font-size: 28px; font-weight: 800; }
+.sign-done h1 { font-size: 21px; }
+.sign-main .qlist li { grid-template-columns: minmax(0, 1fr) auto; }
+.sign-main .qlist li input { grid-column: 1 / -1; }
+@media (max-width: 560px) {
+  .sign-main .grid2 { grid-template-columns: minmax(0, 1fr); }
+  .gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .doc-list { grid-template-columns: minmax(0, 1fr); }
+}

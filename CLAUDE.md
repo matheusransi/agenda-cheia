@@ -16,7 +16,7 @@ Startup de confirmação de consultas por WhatsApp para clínicas odontológicas
 - IDs dos botões: `c:` confirmar, `r:` remarcar, `s:<appt>:<minutos epoch>` escolher horário, `h:` falar com a recepção, `a:`/`d:` aceitar/recusar vaga.
 - Novas configurações por clínica: adicionar em `DEFAULT_SETTINGS` (`src/settings.ts`) e na tela de configurações em `public/app.js`.
 - Mudanças no banco: nova migração em `migrations/` (nunca editar uma já aplicada).
-- Gestão (pacientes, anamnese, odontograma, orçamentos, financeiro): `src/records.ts` e `public/gestao.js`. Dinheiro em centavos nessas tabelas. As telas só aparecem com `modules_beta` ligado (a demo liga; clínicas reais ficam desligadas até o dono aprovar).
+- Gestão (pacientes, anamnese, odontograma, orçamentos, financeiro): `src/records.ts` e `public/gestao.js`. Dinheiro em centavos nessas tabelas. Termos para assinar pelo celular (link público `/p/<token>`, sem senha), ficha de entrada e anexos: `src/signing.ts`, `public/assinar.js`. As telas só aparecem com `modules_beta` ligado (a demo liga; clínicas reais ficam desligadas até o dono aprovar).
 
 ## Comandos
 

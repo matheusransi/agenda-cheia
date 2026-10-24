@@ -39,6 +39,12 @@ const ICONS = {
   clipboard: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 12h6M9 16h4"/>',
   arrowUp: '<path d="M7 17 17 7M8 7h9v9"/>',
   arrowDown: '<path d="M17 7 7 17M16 17H7V8"/>',
+  pen: '<path d="M3 21c3-1 5.5-3.5 7-6M14.5 4.5l5 5L10 19l-6 2 2-6z"/><path d="M14 21h7"/>',
+  image: '<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/>',
+  link: '<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/>',
+  upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>',
+  download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
+  eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
 };
 function icon(name) { return `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] || ''}</svg>`; }
 
@@ -905,6 +911,10 @@ function showConfig() {
           ${area('p-confirm', 'Texto da confirmação', s.templates.confirm.preview)}
           ${area('p-offer', 'Texto da oferta', s.templates.offer.preview)}
           ${area('p-reminder', 'Texto do lembrete', s.templates.reminder.preview)}
+        </div>
+        <div class="grid3">
+          ${field('m-sign', 'Documento para assinar: nome', s.templates.sign.name)}
+          ${area('p-sign', 'Texto do documento para assinar', s.templates.sign.preview)}
         </div>`)}
 
       <div class="save-bar"><span class="hint" id="save-state"></span><button class="btn primary" type="submit">${icon('check')}Salvar configurações</button></div>
@@ -959,6 +969,7 @@ async function saveConfig(e, keepScreen = false) {
         confirm: { name: v('m-confirm'), preview: v('p-confirm') },
         offer: { name: v('m-offer'), preview: v('p-offer') },
         reminder: { name: v('m-reminder'), preview: v('p-reminder') },
+        sign: { name: v('m-sign'), preview: v('p-sign') },
       },
     },
   };

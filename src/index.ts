@@ -12,6 +12,7 @@ import { send, windowOpen } from './messaging';
 import { normalizePhone, phoneKey } from './parse';
 import { type AppEnv, ensurePatient, registerRecords } from './records';
 import { DEFAULT_SETTINGS, mergeSettings } from './settings';
+import { registerPublicSigning, registerSigning } from './signing';
 import { HOUR, addDays, dayRange, localDateKey } from './time';
 import { checkConnection, parseWebhook, verifySignature, verifyToken, whatsappToken } from './whatsapp';
 
@@ -61,6 +62,9 @@ app.get('/demo', async (c) => {
     return c.text(e instanceof Error ? e.message : 'Não foi possível abrir a demonstração.', 503);
   }
 });
+
+// Página do paciente para preencher e assinar documentos (link enviado pelo WhatsApp). Sem senha: o link é secreto.
+registerPublicSigning(app);
 
 app.use('/api/*', async (c, next) => {
   const cookie = c.req.header('cookie') ?? null;
@@ -289,6 +293,7 @@ app.delete('/api/clinics/:id/waitlist/:wid', async (c) => {
 // ---------- Pacientes, orçamentos e financeiro (src/records.ts) ----------
 
 registerRecords(app);
+registerSigning(app);
 
 // ---------- Webhook do WhatsApp ----------
 

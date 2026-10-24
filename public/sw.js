@@ -1,6 +1,6 @@
 // Permite instalar o portal como app. Os dados (/api) sempre vêm da internet;
 // só a "casca" do app fica guardada para abrir rápido e mostrar um aviso se estiver sem conexão.
-const CACHE = 'agenda-cheia-v5';
+const CACHE = 'agenda-cheia-v6';
 const SHELL = ['/', '/app.js', '/gestao.js', '/styles.css', '/manifest.webmanifest', '/icons/icon-192.png'];
 
 self.addEventListener('install', (event) => {
@@ -18,7 +18,7 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   if (event.request.method !== 'GET' || url.origin !== location.origin) return;
-  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/webhook/') || url.pathname === '/demo') return;
+  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/webhook/') || url.pathname.startsWith('/p/') || url.pathname === '/demo') return;
   // Primeiro tenta a versão mais nova; sem internet, usa a guardada.
   event.respondWith(
     fetch(event.request)
